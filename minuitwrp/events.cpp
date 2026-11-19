@@ -394,6 +394,14 @@ int vibrate(int timeout_ms)
 #else
         vib->on((uint32_t)timeout_ms, nullptr);
 #endif
+    } else if (access("/sys/class/leds/vibrator_l/dual_activate", F_OK) == 0) {
+        // Some devices expose two Awinic LRA drivers and no usable AIDL
+        // vibrator service in recovery. Drive both sysfs nodes directly
+        // instead of leaving the haptic request unhandled.
+        write_to_file("/sys/class/leds/vibrator_l/duration", tout);
+        write_to_file("/sys/class/leds/vibrator_r/duration", tout);
+        write_to_file("/sys/class/leds/vibrator_l/dual_duration", tout);
+        write_to_file("/sys/class/leds/vibrator_l/dual_activate", "1");
     }
 #elif defined(USE_SAMSUNG_HAPTICS)
     /* Newer Samsung devices have duration file only
