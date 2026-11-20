@@ -986,12 +986,19 @@ void BuildFormatData(Tools *state, bool fastboot_mode = false) {
   lv_obj_set_style_radius(state->format_input, 24, 0);
   lv_obj_set_style_pad_all(state->format_input, 32, 0);
 
+  const int screen_width = ScreenWidth(state->screen);
+  const int screen_height = lv_obj_get_height(state->screen);
+  const int nav_top = fastboot_mode
+      ? screen_height - 48
+      : screen_height - NavigationHeight(state->screen) - (landscape ? 18 : 24);
+  const int keyboard_x = landscape ? 1080 : 48;
+  const int keyboard_width = landscape ? std::max(900, screen_width - keyboard_x - 64)
+                                       : screen_width - 96;
   auto *keyboard = lv_keyboard_create(state->screen);
   phone_keyboard::Apply(keyboard);
   lv_obj_set_align(keyboard, LV_ALIGN_TOP_LEFT);
-  lv_obj_set_pos(keyboard, landscape ? 1100 : 48, landscape ? 330 : 1540);
-  lv_obj_set_size(keyboard, landscape ? 2004 : ScreenWidth(state->screen) - 96,
-                  landscape ? 850 : 780);
+  lv_obj_set_pos(keyboard, keyboard_x, landscape ? 330 : 1540);
+  lv_obj_set_size(keyboard, keyboard_width, landscape ? 850 : 780);
   lv_keyboard_set_mode(keyboard, LV_KEYBOARD_MODE_TEXT_LOWER);
   lv_keyboard_set_textarea(keyboard, state->format_input);
 
@@ -1003,9 +1010,14 @@ void BuildFormatData(Tools *state, bool fastboot_mode = false) {
     lv_textarea_set_text(state->format_input, "");
     Run(state, request);
   });
-  lv_obj_set_pos(state->format_submit, 80,
-                 (landscape ? 1140 : 2600) + (landscape ? mode_offset : 0));
-  lv_obj_set_size(state->format_submit, landscape ? 450 : ContentWidth(state->screen), 132);
+  const int submit_height = 132;
+  const int cancel_height = landscape ? 132 : 112;
+  const int action_gap = 20;
+  const int action_block_height = submit_height + action_gap + cancel_height;
+  const int action_top = nav_top - action_block_height - 24;
+  lv_obj_set_pos(state->format_submit, 80, action_top);
+  lv_obj_set_size(state->format_submit, landscape ? 450 : ContentWidth(state->screen),
+                  submit_height);
   lv_obj_set_style_bg_color(state->format_submit, kRed, 0);
   lv_obj_set_style_bg_color(state->format_submit, kRedSoft, LV_STATE_PRESSED);
   lv_obj_set_style_bg_color(state->format_submit, kMainPanel, LV_STATE_DISABLED);
@@ -1018,8 +1030,9 @@ void BuildFormatData(Tools *state, bool fastboot_mode = false) {
     Open(state, fastboot_mode ? Action::kBack : Action::kWipe);
   });
   lv_obj_set_pos(cancel, landscape ? 570 : 80,
-                 (landscape ? 1140 : 2770) + (landscape ? mode_offset : 0));
-  lv_obj_set_size(cancel, landscape ? 450 : ContentWidth(state->screen), landscape ? 132 : 112);
+                 action_top + submit_height + action_gap);
+  lv_obj_set_size(cancel, landscape ? 450 : ContentWidth(state->screen),
+                  cancel_height);
 }
 
 lv_obj_t *WorkflowModeCard(lv_obj_t *parent, int x, int y, int width,
@@ -3702,11 +3715,20 @@ void BuildUsers(Tools *state) {
 void BuildMenu(Tools *state) {
   Header(state->screen, "Menu", "Tools for your recovery session.",
          state->callback, state->context);
-  // Utility cards scroll. About and Reboot are full-width destinations pinned
-  // above Navigation, with About immediately above the final Reboot action.
   const bool landscape = Landscape(state->screen);
-  state->list = Scroll(state->screen, landscape ? 340 : 452,
-                       landscape ? 438 : 1900);
+  const int screen_height = lv_obj_get_height(state->screen);
+  const int top = landscape ? 340 : 452;
+  const int page_width = PageWidth(state->screen);
+  const int nav_top = screen_height - NavigationHeight(state->screen) -
+                      (landscape ? 18 : 24);
+  const int footer_gap = landscape ? 18 : 28;
+  const int about_height = landscape ? 190 : 218;
+  const int reboot_height = landscape ? 190 : 232;
+  const int reboot_y = nav_top - reboot_height;
+  const int about_y = reboot_y - footer_gap - about_height;
+  const int list_height = std::max(260, about_y - footer_gap - top);
+  state->list = Scroll(state->screen, top, list_height);
+
   struct Item { const char *icon, *title, *detail; Action action; };
   const std::array<Item, 12> items{{
     {LV_SYMBOL_DRIVE, "Mounts", "Mount or unmount recovery volumes", Action::kMounts},
@@ -3721,69 +3743,116 @@ void BuildMenu(Tools *state) {
     {LV_SYMBOL_USB, "PC connection", "Transfer and install ZIPs and images from your computer", Action::kPcConnection},
     {"A", "About AERA", "Project identity, contributors and build information", Action::kAbout},
     {LV_SYMBOL_POWER, "Reboot", "Android, recovery, bootloader or power off", Action::kOpenReboot}}};
-  const int page_width = PageWidth(state->screen);
+
+  size_t grid_count = 0;
+  for (const auto &item : items) {
+    const bool pinned = item.action == Action::kAbout ||
+                        item.action == Action::kOpenReboot;
+    if (!pinned && !(item.action == Action::kRootManager && !root::Enabled()))
+      ++grid_count;
+  }
+
+  const int columns = landscape ? 5 : 2;
+  const int column_gap = landscape ? 16 : 24;
+  const int row_gap = landscape ? 16 : 20;
+  const int rows = static_cast<int>((grid_count + columns - 1) / columns);
+  const int card_width = (page_width - (columns - 1) * column_gap) / columns;
+  const int available_height = list_height - (rows - 1) * row_gap;
+  const int min_card_height = landscape ? 210 : 280;
+  const int max_card_height = landscape ? 260 : 360;
+  const int card_height = std::clamp(available_height / std::max(1, rows),
+                                     min_card_height, max_card_height);
+  const int content_height = rows * card_height + (rows - 1) * row_gap;
+  const int pad_top = std::max(0, (list_height - content_height) / 2);
+
   size_t visible_index = 0;
   for (const auto item : items) {
     if (item.action == Action::kRootManager && !root::Enabled()) continue;
+    if (item.action == Action::kAbout || item.action == Action::kOpenReboot) {
+      const bool reboot = item.action == Action::kOpenReboot;
+      const int card_height_pinned = reboot ? reboot_height : about_height;
+      const int card_y = reboot ? reboot_y : about_y;
+      auto *card = lv_button_create(state->screen);
+      Panel(card, 34, kMainSheet);
+      Interactive(card, kMainSelected);
+      lv_obj_set_pos(card, PageMargin, card_y);
+      lv_obj_set_size(card, page_width, card_height_pinned);
+      lv_obj_set_style_transform_scale(card, 256, LV_STATE_PRESSED);
+      lv_obj_set_style_border_width(card, reboot ? 2 : 1, 0);
+      lv_obj_set_style_border_color(card, reboot ? kRed : kMainLine, 0);
+      lv_obj_set_style_border_opa(card, reboot ? LV_OPA_60 : LV_OPA_30, 0);
+      OnClick(card, [state, item] { Open(state, item.action); });
+
+      auto *plate = lv_obj_create(card);
+      Panel(plate, 22, IconBackground());
+      lv_obj_set_pos(plate, 28, landscape ? 47 : reboot ? 68 : 55);
+      lv_obj_set_size(plate, 96, 96);
+      auto *icon = Label(plate, item.icon, &lv_font_montserrat_48,
+                         reboot ? kRed : kAccent);
+      lv_obj_center(icon);
+      auto *title = Label(card, item.title, &lv_font_montserrat_36, kText);
+      lv_obj_set_pos(title, 152, landscape ? 36 : reboot ? 40 : 42);
+      const int title_width = page_width - 272;
+      lv_obj_set_width(title, title_width);
+      FitLabelToLines(title, title_width, 1,
+                      {&lv_font_montserrat_36, &lv_font_montserrat_32,
+                       &lv_font_montserrat_28, &lv_font_montserrat_24,
+                       &lv_font_montserrat_20, &lv_font_montserrat_18,
+                       &lv_font_montserrat_16});
+      auto *detail = Label(card, item.detail, &lv_font_montserrat_32, kMuted);
+      lv_obj_set_pos(detail, 152, landscape ? 112 : reboot ? 126 : 122);
+      lv_obj_set_width(detail, title_width);
+      FitLabelToLines(detail, title_width, 2,
+                      {&lv_font_montserrat_32, &lv_font_montserrat_28,
+                       &lv_font_montserrat_24, &lv_font_montserrat_20,
+                       &lv_font_montserrat_18, &lv_font_montserrat_16});
+      auto *arrow = Label(card, LV_SYMBOL_RIGHT, &lv_font_montserrat_36,
+                          reboot ? kRed : kMutedStrong);
+      lv_obj_align(arrow, LV_ALIGN_RIGHT_MID, -30, 0);
+      AnimateEnter(card, 30 + static_cast<uint32_t>(visible_index++) * 28, 12);
+      continue;
+    }
+
     const size_t i = visible_index++;
-    const bool reboot = item.action == Action::kOpenReboot;
-    const bool about = item.action == Action::kAbout;
-    const bool pinned = about || reboot;
-    const int columns = landscape ? 3 : 2;
     const int column = static_cast<int>(i % columns);
     const int row = static_cast<int>(i / columns);
-    auto *card = lv_button_create(pinned ? state->screen : state->list);
+    auto *card = lv_button_create(state->list);
     Panel(card, 34, kMainSheet);
     Interactive(card, kMainSelected);
-    // These two deliberate destinations form a full-width stack immediately
-    // above the four-button navigation dock.
-    const int card_width = landscape ? 992 : (page_width - 32) / 2;
-    const int card_step = landscape ? 284 : 306;
-    const int card_height = landscape ? 260 : 280;
-    const int pinned_y = about ? (landscape ? 798 : 2398)
-                               : (landscape ? 1010 : 2648);
-    lv_obj_set_pos(card, pinned ? 64 : column * (landscape ? 1016 : card_width + 32),
-                   pinned ? pinned_y : row * card_step);
-    lv_obj_set_size(card, pinned ? (landscape ? 3040 : page_width) : card_width,
-                    pinned ? (landscape ? 190 : about ? 218 : 232)
-                           : card_height);
+    lv_obj_set_pos(card, column * (card_width + column_gap),
+                   pad_top + row * (card_height + row_gap));
+    lv_obj_set_size(card, card_width, card_height);
     lv_obj_set_style_transform_scale(card, 256, LV_STATE_PRESSED);
-    lv_obj_set_style_border_width(card, reboot ? 2 : 1, 0);
-    lv_obj_set_style_border_color(card, reboot ? kRed : kMainLine, 0);
-    lv_obj_set_style_border_opa(card, reboot ? LV_OPA_60 : LV_OPA_30, 0);
+    lv_obj_set_style_border_width(card, 1, 0);
+    lv_obj_set_style_border_color(card, kMainLine, 0);
+    lv_obj_set_style_border_opa(card, LV_OPA_30, 0);
     OnClick(card, [state, item] { Open(state, item.action); });
 
     auto *plate = lv_obj_create(card);
     Panel(plate, 22, IconBackground());
-    lv_obj_set_pos(plate, 28, pinned ? (landscape ? 47 : about ? 55 : 68) : 28);
-    lv_obj_set_size(plate, pinned ? 96 : 108, pinned ? 96 : 108);
-    auto *icon = Label(plate, item.icon, &lv_font_montserrat_48,
-                       reboot ? kRed : kAccent);
+    lv_obj_set_pos(plate, 28, 28);
+    lv_obj_set_size(plate, 108, 108);
+    auto *icon = Label(plate, item.icon, &lv_font_montserrat_48, kAccent);
     lv_obj_center(icon);
     auto *title = Label(card, item.title, &lv_font_montserrat_36, kText);
-    lv_obj_set_pos(title, pinned ? 152 : 164,
-                   pinned ? (landscape ? 36 : about ? 42 : 40) : 42);
-    lv_obj_set_width(title, pinned ? (landscape ? 2750 : page_width - 272)
-                                  : card_width - 252);
-    FitLabelToLines(title,
-                    pinned ? (landscape ? 2750 : page_width - 272)
-                           : card_width - 252,
-                    1, {&lv_font_montserrat_36, &lv_font_montserrat_32,
-                        &lv_font_montserrat_28, &lv_font_montserrat_24,
-                        &lv_font_montserrat_20, &lv_font_montserrat_18,
-                        &lv_font_montserrat_16});
+    lv_obj_set_pos(title, 164, 42);
+    const int title_width = card_width - 252;
+    lv_obj_set_width(title, title_width);
+    FitLabelToLines(title, title_width, 1,
+                    {&lv_font_montserrat_36, &lv_font_montserrat_32,
+                     &lv_font_montserrat_28, &lv_font_montserrat_24,
+                     &lv_font_montserrat_20, &lv_font_montserrat_18,
+                     &lv_font_montserrat_16});
     auto *detail = Label(card, item.detail, &lv_font_montserrat_32, kMuted);
-    lv_obj_set_pos(detail, pinned ? 152 : 30,
-                   pinned ? (landscape ? 112 : about ? 122 : 126)
-                          : (landscape ? 150 : 164));
-    FitLabelToLines(detail,
-                    pinned ? (landscape ? 2750 : page_width - 272)
-                           : card_width - 100,
-                    2, {&lv_font_montserrat_32, &lv_font_montserrat_28,
-                        &lv_font_montserrat_24, &lv_font_montserrat_20,
-                        &lv_font_montserrat_18, &lv_font_montserrat_16});
+    lv_obj_set_pos(detail, 30, 150);
+    const int detail_width = card_width - 100;
+    lv_obj_set_width(detail, detail_width);
+    FitLabelToLines(detail, detail_width, 2,
+                    {&lv_font_montserrat_32, &lv_font_montserrat_28,
+                     &lv_font_montserrat_24, &lv_font_montserrat_20,
+                     &lv_font_montserrat_18, &lv_font_montserrat_16});
     auto *arrow = Label(card, LV_SYMBOL_RIGHT, &lv_font_montserrat_36,
-                        reboot ? kRed : kMutedStrong);
+                        kMutedStrong);
     lv_obj_align(arrow, LV_ALIGN_RIGHT_MID, -30, 0);
     AnimateEnter(card, 30 + static_cast<uint32_t>(i) * 28, 12);
   }
