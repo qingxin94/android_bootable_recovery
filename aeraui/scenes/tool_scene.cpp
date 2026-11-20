@@ -849,9 +849,15 @@ void StorageChooser(Tools *state) {
   Clear(overlay);
   lv_obj_set_size(overlay, LV_PCT(100), LV_PCT(100));
   MainBackground(overlay);
+  const int screen_height = lv_obj_get_height(state->screen);
+  const int list_top = std::min(420, std::max(260, screen_height / 7));
+  const int close_height = 140;
+  const int close_margin = 80;
+  const int close_y = screen_height - close_height - close_margin;
+  const int list_height = std::max(280, close_y - list_top - 40);
   auto *heading = Label(overlay, "Choose storage", &lv_font_montserrat_48, kText);
-  lv_obj_set_pos(heading, 80, 250);
-  auto *list = Scroll(overlay, 420, 2050);
+  lv_obj_set_pos(heading, 80, std::max(120, list_top - 170));
+  auto *list = Scroll(overlay, list_top, list_height);
   auto volumes = RecoveryVolumes("storage");
   for (size_t i = 0; i < volumes.size(); ++i) {
     const auto v = volumes[i];
@@ -862,8 +868,8 @@ void StorageChooser(Tools *state) {
     });
   }
   auto *close = Button(overlay, "Back", [overlay] { lv_obj_delete_async(overlay); });
-  lv_obj_set_size(close, ContentWidth(overlay) - 20, 140);
-  lv_obj_align(close, LV_ALIGN_BOTTOM_MID, 0, -180);
+  lv_obj_set_size(close, ContentWidth(overlay) - 20, close_height);
+  lv_obj_align(close, LV_ALIGN_BOTTOM_MID, 0, -close_margin);
 }
 
 // Two side-by-side controls that together fill the page width (630 + 20 + 662
@@ -3759,7 +3765,7 @@ void BuildMenu(Tools *state) {
   const int card_width = (page_width - (columns - 1) * column_gap) / columns;
   const int available_height = list_height - (rows - 1) * row_gap;
   const int min_card_height = landscape ? 210 : 280;
-  const int max_card_height = landscape ? 260 : 360;
+  const int max_card_height = landscape ? 340 : 300;
   const int card_height = std::clamp(available_height / std::max(1, rows),
                                      min_card_height, max_card_height);
   const int content_height = rows * card_height + (rows - 1) * row_gap;
@@ -3816,12 +3822,15 @@ void BuildMenu(Tools *state) {
     const size_t i = visible_index++;
     const int column = static_cast<int>(i % columns);
     const int row = static_cast<int>(i / columns);
+    const bool fill_last_row = grid_count % columns != 0 &&
+                               i == grid_count - 1 && column == 0;
+    const int item_width = fill_last_row ? page_width : card_width;
     auto *card = lv_button_create(state->list);
     Panel(card, 34, kMainSheet);
     Interactive(card, kMainSelected);
-    lv_obj_set_pos(card, column * (card_width + column_gap),
+    lv_obj_set_pos(card, fill_last_row ? 0 : column * (card_width + column_gap),
                    pad_top + row * (card_height + row_gap));
-    lv_obj_set_size(card, card_width, card_height);
+    lv_obj_set_size(card, item_width, card_height);
     lv_obj_set_style_transform_scale(card, 256, LV_STATE_PRESSED);
     lv_obj_set_style_border_width(card, 1, 0);
     lv_obj_set_style_border_color(card, kMainLine, 0);
@@ -3836,7 +3845,7 @@ void BuildMenu(Tools *state) {
     lv_obj_center(icon);
     auto *title = Label(card, item.title, &lv_font_montserrat_36, kText);
     lv_obj_set_pos(title, 164, 42);
-    const int title_width = card_width - 252;
+    const int title_width = item_width - 252;
     lv_obj_set_width(title, title_width);
     FitLabelToLines(title, title_width, 1,
                     {&lv_font_montserrat_36, &lv_font_montserrat_32,
@@ -3845,7 +3854,7 @@ void BuildMenu(Tools *state) {
                      &lv_font_montserrat_16});
     auto *detail = Label(card, item.detail, &lv_font_montserrat_32, kMuted);
     lv_obj_set_pos(detail, 30, 150);
-    const int detail_width = card_width - 100;
+    const int detail_width = item_width - 100;
     lv_obj_set_width(detail, detail_width);
     FitLabelToLines(detail, detail_width, 2,
                     {&lv_font_montserrat_32, &lv_font_montserrat_28,

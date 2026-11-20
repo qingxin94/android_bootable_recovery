@@ -782,6 +782,70 @@ int main(int argc,char **argv) {
     assert(png_image_write_to_file(&image,path,0,frame.data(),0,nullptr));
   };
   auto *screen=lv_screen_active();
+  if (!strcmp(argv[1], "--tb323fu-layout")) {
+    const std::array<std::pair<int, int>, 2> resolutions{{
+        {1904, 3040}, {3040, 1904}}};
+    frame.resize(3040 * 3040 * 4);
+    lv_display_set_buffers(display, frame.data(), nullptr, frame.size(),
+                           LV_DISPLAY_RENDER_MODE_DIRECT);
+    int cases = 0;
+    for (auto resolution : resolutions) for (int size : {0, 2}) {
+      const int width = resolution.first;
+      const int height = resolution.second;
+      lv_display_set_resolution(display, width, height);
+      design::ApplyInterfaceSize(size);
+      interface_size = static_cast<InterfaceSize>(size);
+      char path[160];
+      printf("TB323FU UI: %dx%d size=%d\n", width, height, size);
+      fflush(stdout);
+
+      auto *menu = lv_obj_create(nullptr);
+      BuildToolScene(menu, Action::kSettings, RecordAction, nullptr);
+      lv_screen_load(menu); Tick(30);
+      auto *reboot = Find(menu, "Reboot"); assert(reboot);
+      auto *about = Find(menu, "About AERA"); assert(about);
+      auto *dock = Find(menu, "Home"); assert(dock);
+      AssertInside(reboot, width, height);
+      AssertInside(about, width, height);
+      assert(Bounds(reboot).y2 < Bounds(dock).y1);
+      assert(Bounds(about).y2 < Bounds(reboot).y1);
+      snprintf(path, sizeof(path), "/tmp/aera-tb-menu-%dx%d-s%d.png",
+               width, height, size);
+      save(path, 30);
+      lv_screen_load(screen); lv_obj_delete(menu); Tick(1);
+
+      auto *format = lv_obj_create(nullptr);
+      BuildToolScene(format, Action::kFormatData, RecordAction, nullptr);
+      lv_screen_load(format); Tick(30);
+      auto *cancel = Find(format, "Cancel"); assert(cancel);
+      auto *format_action = Find(format, "Format Data"); assert(format_action);
+      dock = Find(format, "Home"); assert(dock);
+      AssertInside(cancel, width, height);
+      AssertInside(format_action, width, height);
+      assert(Bounds(cancel).y2 < Bounds(dock).y1);
+      snprintf(path, sizeof(path), "/tmp/aera-tb-format-%dx%d-s%d.png",
+               width, height, size);
+      save(path, 30);
+      lv_screen_load(screen); lv_obj_delete(format); Tick(1);
+
+      auto *unlock = lv_obj_create(nullptr);
+      BuildDecryptScene(unlock, 3, false, 0, 3, RecordAction, nullptr);
+      lv_screen_load(unlock); Tick(30);
+      auto *submit = Find(unlock, "Unlock storage"); assert(submit);
+      auto *skip = Find(unlock, "Skip for now"); assert(skip);
+      AssertInside(submit, width, height);
+      AssertInside(skip, width, height);
+      snprintf(path, sizeof(path), "/tmp/aera-tb-unlock-%dx%d-s%d.png",
+               width, height, size);
+      save(path, 30);
+      lv_screen_load(screen); lv_obj_delete(unlock); Tick(1);
+      ++cases;
+    }
+    lv_deinit(); std::filesystem::remove_all(backup_root);
+    printf("TB323FU UI: %d cases passed.\n", cases);
+    return 0;
+  }
+
   if (!strcmp(argv[1], "--wide-layout")) {
     const std::array<std::pair<int, int>, 4> resolutions{{
         {1440, 3168}, {1980, 3168}, {2160, 3840}, {2560, 3200}}};

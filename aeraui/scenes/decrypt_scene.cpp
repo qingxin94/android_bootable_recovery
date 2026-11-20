@@ -296,10 +296,11 @@ void GridSizeClicked(lv_event_t *event) {
   SetPatternGridSize(state, size);
 }
 
-void MakePatternGridSelector(DecryptState *state, lv_obj_t *panel) {
+void MakePatternGridSelector(DecryptState *state, lv_obj_t *panel, int x,
+                             int y) {
   auto *selector = lv_obj_create(panel);
   NoScroll(selector);
-  lv_obj_set_pos(selector, 86, 394);
+  lv_obj_set_pos(selector, x, y);
   lv_obj_set_size(selector, 1012, 88);
   lv_obj_set_style_radius(selector, 28, 0);
   lv_obj_set_style_bg_color(selector, kInset, 0);
@@ -331,10 +332,10 @@ void MakePatternGridSelector(DecryptState *state, lv_obj_t *panel) {
   RefreshGridButtons(state);
 }
 
-void MakePattern(DecryptState *state, lv_obj_t *panel) {
+void MakePattern(DecryptState *state, lv_obj_t *panel, int x, int y) {
   state->pattern_area = lv_obj_create(panel);
   NoScroll(state->pattern_area);
-  lv_obj_set_pos(state->pattern_area, 86, 500);
+  lv_obj_set_pos(state->pattern_area, x, y);
   lv_obj_set_size(state->pattern_area, 1012, 1012);
   lv_obj_set_style_radius(state->pattern_area, 34, 0);
   lv_obj_set_style_bg_color(state->pattern_area, kInset, 0);
@@ -368,7 +369,7 @@ void MakePattern(DecryptState *state, lv_obj_t *panel) {
     lv_obj_set_style_border_color(node, kLineBright, 0);
   }
   LayoutPatternNodes(state);
-  MakePatternGridSelector(state, panel);
+  MakePatternGridSelector(state, panel, x, y - 106);
   RefreshPattern(state);
 }
 
@@ -388,11 +389,14 @@ void PinKeyPressed(lv_event_t *event) {
   }
 }
 
-void MakePinPad(DecryptState *state, lv_obj_t *panel) {
+void MakePinPad(DecryptState *state, lv_obj_t *panel, int x, int y,
+                int key_size, int gap_x, int gap_y, int side_pad) {
+  const int width = side_pad * 2 + key_size * 3 + gap_x * 2;
+  const int height = key_size * 4 + gap_y * 3;
   state->keyboard = lv_obj_create(panel);
   Clear(state->keyboard);
-  lv_obj_set_pos(state->keyboard, 86, 720);
-  lv_obj_set_size(state->keyboard, 1012, 1010);
+  lv_obj_set_pos(state->keyboard, x, y);
+  lv_obj_set_size(state->keyboard, width, height);
   constexpr std::array<const char *, 12> labels{
       "1", "2", "3", "4", "5", "6", "7", "8", "9", "Clear", "0",
       LV_SYMBOL_BACKSPACE};
@@ -402,37 +406,60 @@ void MakePinPad(DecryptState *state, lv_obj_t *panel) {
   static lv_style_transition_dsc_t press_transition;
   lv_style_transition_dsc_init(&press_transition, press_properties,
                                lv_anim_path_ease_out, 110, 0, nullptr);
-  lv_obj_set_pos(state->keyboard, 86, 420);
   for (size_t i = 0; i < labels.size(); ++i) {
     const bool utility = i == 9 || i == 11;
     lv_obj_t *key = MakeButton(state->keyboard, labels[i],
                                kMainPanel, kText);
     if (utility) lv_obj_set_style_bg_opa(key, LV_OPA_TRANSP, 0);
-    lv_obj_set_pos(key, 50 + static_cast<int32_t>(i % 3) * 344,
-                   static_cast<int32_t>(i / 3) * 256);
-    lv_obj_set_size(key, 224, 224);
+    const int step_x = key_size + gap_x;
+    const int step_y = key_size + gap_y;
+    lv_obj_set_pos(key, side_pad + static_cast<int32_t>(i % 3) * step_x,
+                   static_cast<int32_t>(i / 3) * step_y);
+    lv_obj_set_size(key, key_size, key_size);
     lv_obj_set_style_radius(key, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_color(key, kAccentSoft, LV_STATE_PRESSED);
     lv_obj_set_style_transition(key, &press_transition, 0);
     lv_obj_set_style_border_width(key, 0, 0);
-    lv_obj_set_style_text_font(lv_obj_get_child(key, 0),
-                               UiFont(i == 9 ? &lv_font_montserrat_32
-                                             : &lv_font_montserrat_48), 0);
-    if (!utility) {
+    auto *label = lv_obj_get_child(key, 0);
+    if (utility) {
+      lv_obj_set_style_text_font(label, UiFont(key_size >= 200
+                                                   ? &lv_font_montserrat_32
+                                                   : &lv_font_montserrat_24), 0);
+    } else {
       // Render digits at their displayed size instead of scaling a label layer.
-      lv_obj_set_style_text_font(lv_obj_get_child(key, 0),
-                                 fonts::DisplayFont(kInterfaceSize == 0 ? 55 : 66), 0);
-      lv_obj_center(lv_obj_get_child(key, 0));
+      const int font = key_size >= 200 && kInterfaceSize != 0
+                           ? 66
+                           : std::max(28, key_size * 25 / 100);
+      lv_obj_set_style_text_font(label, fonts::DisplayFont(font), 0);
+      lv_obj_center(label);
     }
     lv_obj_set_user_data(key, reinterpret_cast<void *>(keys[i]));
     lv_obj_add_event_cb(key, PinKeyPressed, LV_EVENT_CLICKED, state);
   }
 }
 
-void MakeKeyboard(DecryptState *state, lv_obj_t *panel, bool pin) {
+struct DecryptKeyboardLayout {
+  int input_x = 86;
+  int input_y = 470;
+  int input_width = 1012;
+  lv_obj_t *pad_parent = nullptr;
+  int pad_x = 86;
+  int pad_y = 420;
+  int key_size = 224;
+  int gap_x = 120;
+  int gap_y = 32;
+  int side_pad = 50;
+  int keyboard_x = 36;
+  int keyboard_y = 720;
+  int keyboard_width = 1112;
+  int keyboard_height = 820;
+};
+
+void MakeKeyboard(DecryptState *state, lv_obj_t *panel, bool pin,
+                  const DecryptKeyboardLayout &layout) {
   state->input = widgets::TextArea(panel);
-  lv_obj_set_pos(state->input, 86, 470);
-  lv_obj_set_size(state->input, 1012, 160);
+  lv_obj_set_pos(state->input, layout.input_x, layout.input_y);
+  lv_obj_set_size(state->input, layout.input_width, 160);
   lv_textarea_set_one_line(state->input, true);
   lv_textarea_set_password_mode(state->input, true);
   lv_textarea_set_password_show_time(state->input, 0);
@@ -453,27 +480,26 @@ void MakeKeyboard(DecryptState *state, lv_obj_t *panel, bool pin) {
 
   if (pin) {
     lv_obj_set_style_text_font(state->input, UiFont(&lv_font_montserrat_48), 0);
-    lv_obj_set_pos(state->input, 86, 90);
     lv_obj_set_style_text_align(state->input, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_letter_space(state->input, 12, 0);
     lv_obj_set_style_bg_opa(state->input, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(state->input, 0, 0);
     lv_obj_set_style_border_width(state->input, 0, LV_STATE_FOCUSED);
     lv_obj_set_style_opa(state->input, LV_OPA_TRANSP, LV_PART_CURSOR);
-    MakePinPad(state, panel);
+    MakePinPad(state, layout.pad_parent ? layout.pad_parent : panel,
+               layout.pad_x, layout.pad_y, layout.key_size, layout.gap_x,
+               layout.gap_y, layout.side_pad);
     return;
   }
 
-  state->keyboard = lv_keyboard_create(panel);
+  lv_obj_t *keyboard_parent = layout.pad_parent ? layout.pad_parent : panel;
+  state->keyboard = lv_keyboard_create(keyboard_parent);
   phone_keyboard::Apply(state->keyboard);
-  // Keyboard widgets default to BOTTOM_MID. Coordinates below are relative
-  // to the panel's top left, just like the credential field and action buttons.
   lv_obj_set_align(state->keyboard, LV_ALIGN_TOP_LEFT);
-  lv_obj_set_pos(state->keyboard, 36, 720);
-  lv_obj_set_size(state->keyboard, 1112, pin ? 1010 : 820);
-  lv_keyboard_set_mode(state->keyboard,
-                       pin ? LV_KEYBOARD_MODE_NUMBER
-                           : LV_KEYBOARD_MODE_TEXT_LOWER);
+  lv_obj_set_pos(state->keyboard, layout.keyboard_x, layout.keyboard_y);
+  lv_obj_set_size(state->keyboard, layout.keyboard_width,
+                  layout.keyboard_height);
+  lv_keyboard_set_mode(state->keyboard, LV_KEYBOARD_MODE_TEXT_LOWER);
   lv_keyboard_set_textarea(state->keyboard, state->input);
 }
 
@@ -571,55 +597,19 @@ DecryptScene BuildDecryptScene(lv_obj_t *screen, int credential_type,
   lv_obj_add_event_cb(screen, DeleteState, LV_EVENT_DELETE, state);
   MainBackground(screen);
   AttachStatusBar(screen, callback, context, StatusBarAction::kNone, true);
+  const int screen_width = lv_obj_get_width(screen);
+  const int screen_height = lv_obj_get_height(screen);
+  const bool landscape = widgets::Landscape(screen);
   state->language_button = widgets::Button(screen, "Language", [state] { OpenDecryptLanguage(state); });
   lv_obj_set_style_text_align(lv_obj_get_child(state->language_button, 0),
                              LV_TEXT_ALIGN_CENTER, 0);
   lv_obj_set_size(state->language_button, 420, 100);
-  lv_obj_align(state->language_button, LV_ALIGN_TOP_RIGHT, -80, 172);
+  lv_obj_align(state->language_button, LV_ALIGN_TOP_RIGHT, -80,
+               landscape ? 130 : 172);
 
   if(screen_lock)lv_obj_add_flag(state->language_button,LV_OBJ_FLAG_HIDDEN);
   (void)file_based;
   const bool pin = credential_type == 3;
-
-  // A small native lock illustration keeps startup lightweight.
-  lv_obj_t *emblem = lv_obj_create(screen);
-  Clear(emblem);
-  lv_obj_set_size(emblem, 208, 208);
-  lv_obj_align(emblem, LV_ALIGN_TOP_MID, 0, 310);
-  lv_obj_set_style_pad_all(emblem, 0, 0);
-  lv_obj_remove_flag(emblem, LV_OBJ_FLAG_CLICKABLE);
-  lv_obj_t *shackle = lv_obj_create(emblem);
-  Clear(shackle);
-  lv_obj_set_size(shackle, 74, 86);
-  lv_obj_set_pos(shackle, 67, 44);
-  lv_obj_set_style_radius(shackle, 38, 0);
-  lv_obj_set_style_border_width(shackle, 9, 0);
-  lv_obj_set_style_border_color(shackle, kAccent, 0);
-  lv_obj_t *lock_body = lv_obj_create(emblem);
-  Panel(lock_body, 16, kAccent);
-  lv_obj_set_size(lock_body, 104, 80);
-  lv_obj_set_pos(lock_body, 52, 94);
-  lv_obj_set_style_pad_all(lock_body, 0, 0);
-  // The lock itself must stay opaque even when the selected surface style is
-  // translucent; otherwise the lower arc of the shackle shows through as a
-  // misleading "0". Draw a solid, conventional keyhole on top instead.
-  lv_obj_set_style_bg_opa(lock_body, LV_OPA_COVER, 0);
-  lv_obj_set_style_blur_backdrop(lock_body, false, 0);
-  lv_obj_set_style_blur_radius(lock_body, 0, 0);
-  lv_obj_t *keyhole_dot = lv_obj_create(lock_body);
-  Clear(keyhole_dot);
-  lv_obj_set_size(keyhole_dot, 18, 18);
-  lv_obj_align(keyhole_dot, LV_ALIGN_CENTER, 0, -7);
-  lv_obj_set_style_radius(keyhole_dot, LV_RADIUS_CIRCLE, 0);
-  lv_obj_set_style_bg_color(keyhole_dot, kCanvas, 0);
-  lv_obj_set_style_bg_opa(keyhole_dot, LV_OPA_COVER, 0);
-  lv_obj_t *keyhole_stem = lv_obj_create(lock_body);
-  Clear(keyhole_stem);
-  lv_obj_set_size(keyhole_stem, 8, 24);
-  lv_obj_align(keyhole_stem, LV_ALIGN_CENTER, 0, 10);
-  lv_obj_set_style_radius(keyhole_stem, 4, 0);
-  lv_obj_set_style_bg_color(keyhole_stem, kCanvas, 0);
-  lv_obj_set_style_bg_opa(keyhole_stem, LV_OPA_COVER, 0);
 
   const std::string target = user_name.empty()
       ? i18n::Format("Android user %d", user_id)
@@ -630,9 +620,6 @@ DecryptScene BuildDecryptScene(lv_obj_t *screen, int credential_type,
   lv_obj_t *title =
       Label(screen, title_text.c_str(), &lv_font_montserrat_48, kText);
   state->title = title;
-  lv_obj_set_width(title, 1280);
-  lv_obj_set_style_text_align(title, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 584);
   lv_obj_t *subtitle = Label(
       screen,
       state->screen_lock ? "Use your AERA PIN to continue." :
@@ -640,32 +627,139 @@ DecryptScene BuildDecryptScene(lv_obj_t *screen, int credential_type,
       (credential_type == 2 ? "Draw your phone's unlock pattern." :
                               "Use your phone's password to continue."),
       &lv_font_montserrat_32, kMuted);
-  lv_obj_align(subtitle, LV_ALIGN_TOP_MID, 0, 672);
+
+  lv_obj_t *emblem = nullptr;
+  int panel_x = 0, panel_y = 0, panel_width = 0, panel_height = 0;
+  lv_obj_t *pad_panel = nullptr;
+  int pad_width = 0, pad_height = 0;
+
+  if (!landscape) {
+    // A small native lock illustration keeps startup lightweight.
+    emblem = lv_obj_create(screen);
+    Clear(emblem);
+    lv_obj_set_size(emblem, 208, 208);
+    lv_obj_align(emblem, LV_ALIGN_TOP_MID, 0, 310);
+    lv_obj_set_style_pad_all(emblem, 0, 0);
+    lv_obj_remove_flag(emblem, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_t *shackle = lv_obj_create(emblem);
+    Clear(shackle);
+    lv_obj_set_size(shackle, 74, 86);
+    lv_obj_set_pos(shackle, 67, 44);
+    lv_obj_set_style_radius(shackle, 38, 0);
+    lv_obj_set_style_border_width(shackle, 9, 0);
+    lv_obj_set_style_border_color(shackle, kAccent, 0);
+    lv_obj_t *lock_body = lv_obj_create(emblem);
+    Panel(lock_body, 16, kAccent);
+    lv_obj_set_size(lock_body, 104, 80);
+    lv_obj_set_pos(lock_body, 52, 94);
+    lv_obj_set_style_pad_all(lock_body, 0, 0);
+    lv_obj_set_style_bg_opa(lock_body, LV_OPA_COVER, 0);
+    lv_obj_set_style_blur_backdrop(lock_body, false, 0);
+    lv_obj_set_style_blur_radius(lock_body, 0, 0);
+    lv_obj_t *keyhole_dot = lv_obj_create(lock_body);
+    Clear(keyhole_dot);
+    lv_obj_set_size(keyhole_dot, 18, 18);
+    lv_obj_align(keyhole_dot, LV_ALIGN_CENTER, 0, -7);
+    lv_obj_set_style_radius(keyhole_dot, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(keyhole_dot, kCanvas, 0);
+    lv_obj_set_style_bg_opa(keyhole_dot, LV_OPA_COVER, 0);
+    lv_obj_t *keyhole_stem = lv_obj_create(lock_body);
+    Clear(keyhole_stem);
+    lv_obj_set_size(keyhole_stem, 8, 24);
+    lv_obj_align(keyhole_stem, LV_ALIGN_CENTER, 0, 10);
+    lv_obj_set_style_radius(keyhole_stem, 4, 0);
+    lv_obj_set_style_bg_color(keyhole_stem, kCanvas, 0);
+    lv_obj_set_style_bg_opa(keyhole_stem, LV_OPA_COVER, 0);
+
+    lv_obj_set_width(title, 1280);
+    lv_obj_set_style_text_align(title, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 584);
+    lv_obj_align(subtitle, LV_ALIGN_TOP_MID, 0, 672);
+    panel_width = std::min(1600, screen_width - 128);
+    panel_x = (screen_width - panel_width) / 2;
+    panel_y = pin ? 780 : 740;
+    panel_height = std::max(1200, screen_height - panel_y - 24);
+  } else {
+    lv_obj_set_width(title, 1200);
+    lv_obj_set_style_text_align(title, LV_TEXT_ALIGN_LEFT, 0);
+    lv_obj_set_pos(title, 80, 150);
+    lv_obj_set_width(subtitle, 1200);
+    lv_obj_set_pos(subtitle, 80, 240);
+
+    panel_x = 80;
+    panel_y = 330;
+    panel_width = std::min(1200, screen_width / 2 - 40);
+    panel_height = screen_height - panel_y - 24;
+    pad_width = screen_width - (panel_x + panel_width + 40) - 80;
+    pad_height = screen_height - 174;
+    pad_panel = lv_obj_create(screen);
+    Clear(pad_panel);
+    lv_obj_set_pos(pad_panel, panel_x + panel_width + 40, 150);
+    lv_obj_set_size(pad_panel, pad_width, pad_height);
+    lv_obj_set_style_pad_all(pad_panel, 0, 0);
+  }
 
   lv_obj_t *panel = lv_obj_create(screen);
   Clear(panel);
-  lv_obj_set_pos(panel, (static_cast<int>(lv_obj_get_width(screen)) - 1184) / 2,
-                 pin ? 780 : 740);
-  lv_obj_set_size(panel, 1184, 2260);
+  lv_obj_set_pos(panel, panel_x, panel_y);
+  lv_obj_set_size(panel, panel_width, panel_height);
   lv_obj_set_style_pad_all(panel, 0, 0);
 
+  const int field_x = landscape ? 20 : 86;
+  const int field_width = landscape ? panel_width - 40 : panel_width - 172;
   state->status = Label(panel,
                         credential_type == 2 ? "Draw your unlock pattern" :
                                                "",
                         &lv_font_montserrat_24, kMuted);
-  lv_obj_set_pos(state->status, 86, pin ? 286 : 350);
-  lv_obj_set_width(state->status, 1012);
+  lv_obj_set_pos(state->status, field_x, landscape ? 10 : pin ? 286 : 350);
+  lv_obj_set_width(state->status, field_width);
   lv_obj_set_style_text_align(state->status, LV_TEXT_ALIGN_CENTER, 0);
 
-  if (credential_type == 2)
-    MakePattern(state, panel);
-  else
-    MakeKeyboard(state, panel, credential_type == 3);
+  DecryptKeyboardLayout keyboard_layout;
+  keyboard_layout.input_x = field_x;
+  keyboard_layout.input_y = landscape ? 70 : (pin ? 90 : 470);
+  keyboard_layout.input_width = field_width;
+  keyboard_layout.pad_parent = pad_panel;
+  const int portrait_key =
+      screen_width >= 1700 ? 320 : 300;
+  keyboard_layout.key_size = landscape ? 220 : portrait_key;
+  keyboard_layout.gap_x = landscape ? 32 : (screen_width >= 1700 ? 60 : 80);
+  keyboard_layout.gap_y = 32;
+  keyboard_layout.side_pad = landscape
+      ? 0
+      : (field_width - (keyboard_layout.key_size * 3 +
+                        keyboard_layout.gap_x * 2)) / 2;
+  keyboard_layout.pad_x = landscape
+      ? (pad_width - (keyboard_layout.key_size * 3 + keyboard_layout.gap_x * 2)) / 2
+      : field_x;
+  keyboard_layout.pad_y = landscape
+      ? (pad_height - (keyboard_layout.key_size * 4 + keyboard_layout.gap_y * 3)) / 2
+      : 420;
+  keyboard_layout.keyboard_x = 40;
+  keyboard_layout.keyboard_y = 40;
+  keyboard_layout.keyboard_width = landscape
+      ? std::max(600, pad_width - 80)
+      : std::max(600, panel_width - 160);
+  keyboard_layout.keyboard_height = std::min(850, pad_height - 80);
 
+  if (credential_type == 2) {
+    if (landscape)
+      MakePattern(state, pad_panel, (pad_width - 1012) / 2, 150);
+    else
+      MakePattern(state, panel, 86, 500);
+  } else {
+    MakeKeyboard(state, panel, pin, keyboard_layout);
+  }
+
+  const int portrait_submit_y = pin
+      ? std::max(1510, 420 + (keyboard_layout.key_size * 4 +
+                              keyboard_layout.gap_y * 3) + 70)
+      : 1818;
+  const int submit_y = landscape ? 600 : portrait_submit_y;
   state->submit =
       MakeButton(panel, state->screen_lock ? "Unlock" : state->secondary ? "Unlock user" : "Unlock storage", kAccent, kCanvas);
-  lv_obj_set_pos(state->submit, 86, pin ? 1510 : 1818);
-  lv_obj_set_size(state->submit, 1012, 142);
+  lv_obj_set_pos(state->submit, field_x, submit_y);
+  lv_obj_set_size(state->submit, field_width, 142);
   lv_obj_set_style_radius(state->submit, 71, 0);
   state->submit_label = lv_obj_get_child(state->submit, 0);
   lv_obj_t* submit_icon =
@@ -679,23 +773,25 @@ DecryptScene BuildDecryptScene(lv_obj_t *screen, int credential_type,
   lv_obj_t *skip = MakeButton(panel, state->screen_lock ? "Cancel" : "Skip for now", kCanvas,
                               kMutedStrong);
   lv_obj_set_style_bg_opa(skip, LV_OPA_TRANSP, 0);
-  lv_obj_set_pos(skip, 86, pin ? 1690 : 1990);
-  lv_obj_set_size(skip, 1012, 132);
+  lv_obj_set_pos(skip, field_x, landscape ? 760 : submit_y + 180);
+  lv_obj_set_size(skip, field_width, 120);
   Bind(skip, Action::kDecryptSkip, state);
 
   lv_obj_t *hint = Label(
-      screen,
+      panel,
       state->screen_lock ? "Your recovery session stays locked until you unlock it." :
       state->secondary ? "This user remains locked until you unlock it."
                        : "Skipping keeps internal storage locked.",
       &lv_font_montserrat_24, kDim);
-  lv_obj_set_width(hint, 1184);
+  lv_obj_set_width(hint, field_width);
   lv_obj_set_style_text_align(hint, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, pin ? -340 : -70);
+  lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, landscape ? -24 : -30);
 
-  AnimateEnter(emblem, 0, 16);
+  lv_obj_move_foreground(state->language_button);
+  if (emblem != nullptr) AnimateEnter(emblem, 0, 16);
   AnimateEnter(title, 30, 20);
   AnimateEnter(panel, 70, 28);
+  if (pad_panel != nullptr) AnimateEnter(pad_panel, 70, 28);
   return {state->status, state->input, state->submit, state};
 }
 
