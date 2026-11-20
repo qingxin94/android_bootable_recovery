@@ -583,7 +583,7 @@ public:
         decryption_active_ = false;
         decrypt_running_ = false;
         ShowHome();
-        return;
+        return kFrameIntervalMs;
       }
       const bool success =
           decrypt_result_.load(std::memory_order_acquire) == 0;
