@@ -3062,20 +3062,23 @@ static void BuildFilesSurface(lv_obj_t *screen, ActionCallback callback, void *c
   state->path_label = Label(screen, "", path_font, kText);
   lv_obj_set_pos(state->path_label, landscape ? 1460 : 80,
                  landscape ? 358 : 684);
-  SingleLineLabel(state->path_label, landscape ? 1620 : screen_w - 170, path_font);
+  SingleLineLabel(state->path_label,
+                  landscape ? screen_w - 1460 - 64 : screen_w - 170, path_font);
   state->summary = Label(screen, "", summary_font, kMuted);
   lv_obj_set_pos(state->summary, landscape ? 1460 : 80,
                  landscape ? 424 : 750);
   SingleLineLabel(state->summary, landscape ? 1480 : screen_w - 310, summary_font);
   state->search_clear = Button(screen, LV_SYMBOL_CLOSE, [state] { Populate(state); });
-  lv_obj_set_pos(state->search_clear, landscape ? 3008 : screen_w - 200, landscape ? 410 : 730);
+  lv_obj_set_pos(state->search_clear, landscape ? screen_w - 200 : screen_w - 200,
+                 landscape ? 410 : 730);
   lv_obj_set_size(state->search_clear, 88, 80);
   CenterButtonContent(state->search_clear);
   lv_obj_add_flag(state->search_clear, LV_OBJ_FLAG_HIDDEN);
   // The file surface reaches the physical bottom. Navigation is a foreground
   // overlay, while bottom padding keeps the final entry scrollable above it.
-  state->list = Scroll(screen, landscape ? 500 : 826,
-                       landscape ? 940 : 2342);
+  const int list_y = landscape ? 500 : 826;
+  state->list = Scroll(screen, list_y,
+                       std::max(400, lv_obj_get_height(screen) - list_y));
   lv_obj_set_style_pad_bottom(state->list, landscape ? 190 : 242, 0);
   if (!state->picking) Navigation(screen, Action::kNone, callback, context);
   Populate(state);

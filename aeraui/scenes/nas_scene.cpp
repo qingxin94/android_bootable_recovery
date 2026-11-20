@@ -1166,8 +1166,9 @@ NasScene BuildNasScene(lv_obj_t *screen, ActionCallback callback,
   state->scene.list = Scroll(screen, landscape ? 350 : 880,
                              landscape ? 900 : 1964);
   if (landscape) {
+    const int right_width = lv_obj_get_width(screen) - 1560 - 64;
     lv_obj_set_x(state->scene.list, 1560);
-    lv_obj_set_width(state->scene.list, 1544);
+    lv_obj_set_width(state->scene.list, right_width);
   }
   lv_obj_set_style_pad_bottom(state->scene.list, landscape ? 190 : 242, 0);
   state->scene.state = state;

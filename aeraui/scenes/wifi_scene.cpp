@@ -1378,9 +1378,10 @@ WifiScene BuildWifiScene(lv_obj_t *screen, ActionCallback callback, void *contex
   state->scene.list = Scroll(screen, list_top,
       std::max(200, lv_obj_get_height(screen) - list_top - NavigationHeight(screen) - 40));
   if (landscape) {
+    const int right_width = lv_obj_get_width(screen) - 1560 - 64;
     lv_obj_set_x(state->scene.list, 1560);
-    lv_obj_set_width(state->scene.list, 1544);
-    state->list_width = 1544;
+    lv_obj_set_width(state->scene.list, right_width);
+    state->list_width = lv_obj_get_width(screen) - 1560 - 64;
   } else {
     lv_obj_set_x(state->scene.list, 64);
     lv_obj_set_width(state->scene.list, PageWidth(screen));

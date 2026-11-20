@@ -416,23 +416,28 @@ void BuildHomeScene(lv_obj_t *screen, ActionCallback callback, void *context) {
     callback(PluginAction(plugin), context);
   };
   if (landscape) {
+    const int screen_width = lv_obj_get_width(screen);
+    const int card_gap = 32;
+    const int card_width = (screen_width - 128 - 2 * card_gap) / 3;
+    const int card_x[] = {64, 64 + card_width + card_gap,
+                          64 + 2 * (card_width + card_gap)};
     auto *apps = Label(screen, "SYSTEM APPS", &lv_font_montserrat_18, kMuted);
     lv_obj_set_pos(apps, 80, 306);
-    AppCard(screen, 64, 356, 976, LV_SYMBOL_DIRECTORY, "Files",
+    AppCard(screen, card_x[0], 356, card_width, LV_SYMBOL_DIRECTORY, "Files",
             "Browse storage, preview images and install ZIPs.", kAccent,
             [=] { callback(Action::kFiles, context); }, false, false, false, themed_art::Kind::Files);
-    auto *store = AppCard(screen, 1072, 356, 976, LV_SYMBOL_DOWNLOAD, "Plugin Manager",
+    auto *store = AppCard(screen, card_x[1], 356, card_width, LV_SYMBOL_DOWNLOAD, "Plugin Manager",
             "Discover and install signed AERA extensions.", kAccent,
             [=] { callback(Action::kPlugins, context); }, false, false, false, themed_art::Kind::Packages);
     if (!updates.empty()) MarkUpdateAvailable(store);
-    AppCard(screen, 2080, 356, 976, LV_SYMBOL_EDIT, "Terminal",
+    AppCard(screen, card_x[2], 356, card_width, LV_SYMBOL_EDIT, "Terminal",
             "A real recovery shell built into AERA.", kAccent,
             [=] { callback(Action::kTerminal, context); }, false, true);
     auto *extensions = Label(screen, "INSTALLED PLUGINS", &lv_font_montserrat_18, kMuted);
     lv_obj_set_pos(extensions, 80, 760);
     const bool icons = grid_columns >= 4;
     BuildHomePluginGrid(screen, installed,
-                        {64, 810, 2992, 360, icons ? grid_columns : 4, 1, icons ? 250 : 360, icons},
+                        {64, 810, screen_width - 128, 360, icons ? grid_columns : 4, 1, icons ? 250 : 360, icons},
                         factory, launch, callback, context);
     Navigation(screen, Action::kBackHome, callback, context);
     return;

@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 #include "scene.hpp"
+#include <pthread.h>
 #include "../../aera_remote/backup_cancel.hpp"
 #include "../../aera_shared_storage.hpp"
 
@@ -1468,7 +1469,7 @@ void ShowSnapshotApps(State *state, size_t snapshot_index) {
   auto *sheet = lv_obj_create(overlay);
   Panel(sheet, 48, kMainSheet);
   lv_obj_set_size(sheet, sheet_width, sheet_height);
-  lv_obj_align(sheet, LV_ALIGN_CENTER, 0, landscape ? 70 : 80);
+  lv_obj_align(sheet, LV_ALIGN_CENTER, 0, landscape ? 70 : 0);
 
   auto *back = Button(sheet, LV_SYMBOL_LEFT, [state, overlay] {
     lv_obj_delete_async(overlay);
@@ -1890,7 +1891,8 @@ void BuildAppVaultScene(lv_obj_t *screen, ActionCallback callback,
   const bool landscape = Landscape(screen);
   const int page_width = PageWidth(screen);
   const int actions_height = landscape ? 118 : 132;
-  const int actions_y = lv_obj_get_height(screen) - actions_height - 34;
+  const int actions_y = lv_obj_get_height(screen) -
+      NavigationHeight(screen) - actions_height - 24;
   const int apps_y = landscape ? 320 : 1080;
   const int apps_height = actions_y - apps_y - 24;
   auto *hero = lv_obj_create(screen);
@@ -1938,7 +1940,8 @@ void BuildAppVaultScene(lv_obj_t *screen, ActionCallback callback,
   auto *apps_panel = lv_obj_create(screen);
   Panel(apps_panel, 46, kMainSheet);
   lv_obj_set_pos(apps_panel, landscape ? 994 : 64, apps_y);
-  lv_obj_set_size(apps_panel, landscape ? 2110 : page_width,
+  lv_obj_set_size(apps_panel,
+                  landscape ? lv_obj_get_width(screen) - 994 - 64 : page_width,
                   apps_height);
   auto *apps_title = Label(apps_panel, "Apps", &lv_font_montserrat_48, kText);
   lv_obj_set_pos(apps_title, 34, 24);
@@ -1983,7 +1986,8 @@ void BuildAppVaultScene(lv_obj_t *screen, ActionCallback callback,
   state->list = lv_obj_create(apps_panel);
   Clear(state->list);
   lv_obj_set_pos(state->list, 24, 226);
-  lv_obj_set_size(state->list, landscape ? 2062 : page_width - 48,
+  lv_obj_set_size(state->list,
+                  landscape ? lv_obj_get_width(apps_panel) - 48 : page_width - 48,
                   apps_height - 266);
   lv_obj_add_flag(state->list, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_scroll_dir(state->list, LV_DIR_VER);
@@ -1993,10 +1997,10 @@ void BuildAppVaultScene(lv_obj_t *screen, ActionCallback callback,
   auto *actions = lv_obj_create(screen);
   Clear(actions);
   lv_obj_set_pos(actions, 64, actions_y);
-  lv_obj_set_size(actions, landscape ? 3040 : page_width, actions_height);
+  lv_obj_set_size(actions, landscape ? page_width : page_width, actions_height);
   const int gap = 20;
   const int columns = 3;
-  const int width = ((landscape ? 3040 : page_width) - gap * (columns - 1)) / columns;
+  const int width = (page_width - gap * (columns - 1)) / columns;
   auto add = [&](lv_obj_t **target, const char *text, int index,
                  Handler action, bool primary = false) {
     *target = Button(actions, text, std::move(action), primary);
@@ -2028,6 +2032,7 @@ void BuildAppVaultScene(lv_obj_t *screen, ActionCallback callback,
   Navigation(screen, Action::kBackHome, callback, context, true);
 
   state->prepare_thread = std::thread([state] {
+    pthread_setname_np(pthread_self(), "aera-vault-prep");
     web::PreparePluginRuntime(state->preparation, kPluginId, kPluginType,
                               kPluginEntry);
     if (state->preparation.verified)

@@ -678,7 +678,8 @@ DecryptScene BuildDecryptScene(lv_obj_t *screen, int credential_type,
     panel_width = std::min(1600, screen_width - 128);
     panel_x = (screen_width - panel_width) / 2;
     panel_y = pin ? 780 : 740;
-    panel_height = std::max(1200, screen_height - panel_y - 24);
+    panel_height = std::max(1200, screen_height -
+        widgets::NavigationHeight(screen) - panel_y - 4);
   } else {
     lv_obj_set_width(title, 1200);
     lv_obj_set_style_text_align(title, LV_TEXT_ALIGN_LEFT, 0);
@@ -689,12 +690,14 @@ DecryptScene BuildDecryptScene(lv_obj_t *screen, int credential_type,
     panel_x = 80;
     panel_y = 330;
     panel_width = std::min(1200, screen_width / 2 - 40);
-    panel_height = screen_height - panel_y - 24;
+    panel_height = std::max(900, screen_height -
+        widgets::NavigationHeight(screen) - panel_y - 24);
     pad_width = screen_width - (panel_x + panel_width + 40) - 80;
-    pad_height = screen_height - 174;
+    const int nav_top = screen_height - widgets::NavigationHeight(screen);
+    pad_height = std::max(900, nav_top - 330 - 24);
     pad_panel = lv_obj_create(screen);
     Clear(pad_panel);
-    lv_obj_set_pos(pad_panel, panel_x + panel_width + 40, 150);
+    lv_obj_set_pos(pad_panel, panel_x + panel_width + 40, 330);
     lv_obj_set_size(pad_panel, pad_width, pad_height);
     lv_obj_set_style_pad_all(pad_panel, 0, 0);
   }
@@ -721,10 +724,10 @@ DecryptScene BuildDecryptScene(lv_obj_t *screen, int credential_type,
   keyboard_layout.input_width = field_width;
   keyboard_layout.pad_parent = pad_panel;
   const int portrait_key =
-      screen_width >= 1700 ? 320 : 300;
+      screen_width >= 1700 ? 300 : 280;
   keyboard_layout.key_size = landscape ? 220 : portrait_key;
-  keyboard_layout.gap_x = landscape ? 32 : (screen_width >= 1700 ? 60 : 80);
-  keyboard_layout.gap_y = 32;
+  keyboard_layout.gap_x = landscape ? 32 : (screen_width >= 1700 ? 60 : 76);
+  keyboard_layout.gap_y = landscape ? 32 : (pin ? 24 : 28);
   keyboard_layout.side_pad = landscape
       ? 0
       : (field_width - (keyboard_layout.key_size * 3 +
@@ -736,11 +739,13 @@ DecryptScene BuildDecryptScene(lv_obj_t *screen, int credential_type,
       ? (pad_height - (keyboard_layout.key_size * 4 + keyboard_layout.gap_y * 3)) / 2
       : 420;
   keyboard_layout.keyboard_x = 40;
-  keyboard_layout.keyboard_y = 40;
+  keyboard_layout.keyboard_y = landscape ? 40 : keyboard_layout.input_y + 200;
   keyboard_layout.keyboard_width = landscape
       ? std::max(600, pad_width - 80)
       : std::max(600, panel_width - 160);
-  keyboard_layout.keyboard_height = std::min(850, pad_height - 80);
+  keyboard_layout.keyboard_height = landscape
+      ? std::min(850, pad_height - 80)
+      : std::min(850, panel_height - keyboard_layout.keyboard_y - 220);
 
   if (credential_type == 2) {
     if (landscape)
@@ -752,10 +757,10 @@ DecryptScene BuildDecryptScene(lv_obj_t *screen, int credential_type,
   }
 
   const int portrait_submit_y = pin
-      ? std::max(1510, 420 + (keyboard_layout.key_size * 4 +
-                              keyboard_layout.gap_y * 3) + 70)
-      : 1818;
-  const int submit_y = landscape ? 600 : portrait_submit_y;
+      ? 420 + keyboard_layout.key_size * 4 + keyboard_layout.gap_y * 3 + 70
+      : keyboard_layout.keyboard_y + keyboard_layout.keyboard_height + 40;
+  const int submit_y = landscape ? 600 : std::min(portrait_submit_y,
+      panel_height - 300);
   state->submit =
       MakeButton(panel, state->screen_lock ? "Unlock" : state->secondary ? "Unlock user" : "Unlock storage", kAccent, kCanvas);
   lv_obj_set_pos(state->submit, field_x, submit_y);
@@ -773,7 +778,9 @@ DecryptScene BuildDecryptScene(lv_obj_t *screen, int credential_type,
   lv_obj_t *skip = MakeButton(panel, state->screen_lock ? "Cancel" : "Skip for now", kCanvas,
                               kMutedStrong);
   lv_obj_set_style_bg_opa(skip, LV_OPA_TRANSP, 0);
-  lv_obj_set_pos(skip, field_x, landscape ? 760 : submit_y + 180);
+  lv_obj_set_pos(skip, field_x,
+      landscape ? 760 : std::min(submit_y + 148,
+                                 panel_height - 120));
   lv_obj_set_size(skip, field_width, 120);
   Bind(skip, Action::kDecryptSkip, state);
 
@@ -785,7 +792,11 @@ DecryptScene BuildDecryptScene(lv_obj_t *screen, int credential_type,
       &lv_font_montserrat_24, kDim);
   lv_obj_set_width(hint, field_width);
   lv_obj_set_style_text_align(hint, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, landscape ? -24 : -30);
+  if (landscape) {
+    lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -24);
+  } else {
+    lv_obj_add_flag(hint, LV_OBJ_FLAG_HIDDEN);
+  }
 
   lv_obj_move_foreground(state->language_button);
   if (emblem != nullptr) AnimateEnter(emblem, 0, 16);

@@ -174,11 +174,16 @@ void BuildRebootScene(lv_obj_t *screen, ActionCallback callback, void *context) 
   auto *list = Scroll(screen, landscape ? 392 : (has_slots ? 948 : 510),
                       landscape ? 820 : 1730);
   if (landscape) {
-    lv_obj_set_x(list, has_slots ? 1436 : 64);
-    lv_obj_set_width(list, has_slots ? 1668 : 3040);
+    const int list_x = has_slots ? 1436 : 64;
+    lv_obj_set_x(list, list_x);
+    lv_obj_set_width(list, lv_obj_get_width(screen) - list_x - 64);
   }
-  const int columns = landscape && !has_slots ? 3 : 2;
-  const int card_width = landscape ? (has_slots ? 818 : 996) : (page_width - 32) / 2;
+  const int columns = landscape ? 3 : 2;
+  const int list_width = landscape
+      ? lv_obj_get_width(screen) - (has_slots ? 1436 : 64) - 64
+      : page_width;
+  const int card_width = landscape ? (list_width - 48) / 3
+                                   : (page_width - 32) / 2;
   for (size_t i = 0; i < destinations.size(); ++i) {
     const auto d = destinations[i];
     const int column = static_cast<int>(i % columns);

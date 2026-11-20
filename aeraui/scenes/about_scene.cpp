@@ -346,30 +346,32 @@ void BuildAboutScene(lv_obj_t *screen, ActionCallback callback, void *context) {
   if (landscape) {
     BrandHero(content, 0, 0, 980, 842, true, callback, context);
 
+    const int right_x = 1032;
+    const int right_width = lv_obj_get_width(content) - right_x - 40;
     auto *credits = Kicker(content, "THE PEOPLE BEHIND AERA", kAccent);
-    lv_obj_set_pos(credits, 1040, 4);
-    Contributor(content, 1032, 54, 2008, "J", "Jonas Salo · koaaN",
+    lv_obj_set_pos(credits, right_x + 8, 4);
+    Contributor(content, right_x, 54, right_width, "J", "Jonas Salo · koaaN",
                 "Founder, lead developer & interface direction", 45);
-    Contributor(content, 1032, 306, 2008, "D", "Daniel Springer · Daniel210191",
+    Contributor(content, right_x, 306, right_width, "D", "Daniel Springer · Daniel210191",
                 "Core developer & recovery engineering", 70);
 
     auto *identity = lv_obj_create(content);
     Panel(identity, 34, kMainPanel);
-    lv_obj_set_pos(identity, 1032, 574);
-    lv_obj_set_size(identity, 2008, 268);
+    lv_obj_set_pos(identity, right_x, 574);
+    lv_obj_set_size(identity, right_width, 268);
     lv_obj_set_style_border_width(identity, 1, 0);
     lv_obj_set_style_border_color(identity, kMainLine, 0);
     lv_obj_set_style_border_opa(identity, LV_OPA_30, 0);
-    IdentityRow(identity, 38, 38, 520, "MAINTAINER", maintainer);
-    IdentityRow(identity, 650, 38, 240, "VERSION", version);
-    DeveloperEntrance(IdentityRow(identity, 982, 38, 300, "BUILD", build_identity), callback, context);
-    IdentityRow(identity, 1374, 38, slot.empty() ? 610 : 360, "DEVICE", device);
-    if (!slot.empty()) IdentityRow(identity, 1810, 38, 150, "SLOT", slot);
+    IdentityRow(identity, 38, 38, 350, "MAINTAINER", maintainer);
+    IdentityRow(identity, 410, 38, 220, "VERSION", version);
+    DeveloperEntrance(IdentityRow(identity, 650, 38, 310, "BUILD", build_identity), callback, context);
+    IdentityRow(identity, 980, 38, 360, "DEVICE", device);
+    if (!slot.empty()) IdentityRow(identity, 1360, 38, 140, "SLOT", slot);
     auto *foundation = Label(identity,
         "Open-source foundations · Android Recovery · TWRP · OrangeFox · LVGL",
         &lv_font_montserrat_24, kMuted);
     lv_obj_set_pos(foundation, 38, 188);
-    lv_obj_set_width(foundation, 1920);
+    lv_obj_set_width(foundation, right_width - 76);
     AnimateEnter(identity, 95, 10);
   } else {
     const int page_width = PageWidth(screen);

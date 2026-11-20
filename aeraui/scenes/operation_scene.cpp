@@ -565,7 +565,9 @@ OperationScene BuildJobScene(lv_obj_t *screen, const JobRequest &request,
   // Content width inside the cards (page width minus 96).
   const int page_width = PageWidth(screen);
   const int card_inner = landscape ? 1216 : page_width - 96;
-  const int activity_inner = landscape ? 1448 : page_width - 96;
+  const int activity_width = landscape
+      ? lv_obj_get_width(screen) - 1560 - 64 : page_width;
+  const int activity_inner = activity_width - 96;
   lv_obj_set_size(card, landscape ? 1450 : page_width,
                   landscape ? 850 : 756);
   lv_obj_set_style_border_width(card, 1, 0);
@@ -701,8 +703,7 @@ OperationScene BuildJobScene(lv_obj_t *screen, const JobRequest &request,
   result.activity_panel = activity_card;
   Panel(activity_card, 40, kMainSheet);
   lv_obj_set_pos(activity_card, landscape ? 1560 : 64, activity_y);
-  lv_obj_set_size(activity_card, landscape ? 1544 : page_width,
-                  activity_height);
+  lv_obj_set_size(activity_card, activity_width, activity_height);
   lv_obj_set_style_border_width(activity_card, 1, 0);
   lv_obj_set_style_border_color(activity_card, kMainLine, 0);
   lv_obj_set_style_border_opa(activity_card, LV_OPA_20, 0);
@@ -803,9 +804,12 @@ OperationScene BuildJobScene(lv_obj_t *screen, const JobRequest &request,
     for (size_t i = 0; i < request.partitions.size(); ++i) {
       auto *row = lv_obj_create(result.payload_list);
       Clear(row);
-      lv_obj_set_pos(row, landscape ? (i % 2) * 748 : 0,
+      const int payload_row_width = landscape
+          ? (activity_inner - 48) / 2 : activity_inner;
+      lv_obj_set_pos(row,
+                     landscape ? (i % 2) * (payload_row_width + 48) : 0,
                      landscape ? (i / 2) * 115 : i * 86);
-      lv_obj_set_size(row, landscape ? 700 : activity_inner, landscape ? 100 : 76);
+      lv_obj_set_size(row, payload_row_width, landscape ? 100 : 76);
       lv_obj_remove_flag(row, LV_OBJ_FLAG_SCROLLABLE);
       result.payload_cards[i] = row;
       result.payload_names[i] = Label(row, "Waiting", &lv_font_montserrat_32, kText);

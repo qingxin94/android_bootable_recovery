@@ -1526,7 +1526,8 @@ void OpenChat(TelegramScene *scene, int64_t id, const std::string &title) {
   scene->composer = Input(scene->surface, 2780, "Message");
   lv_obj_set_pos(scene->composer, scene->landscape ? 1750 : 182,
                  scene->landscape ? 170 : 2780);
-  lv_obj_set_width(scene->composer, scene->landscape ? 1190 : 1088);
+  lv_obj_set_width(scene->composer, scene->landscape
+      ? lv_obj_get_width(scene->surface) - 1910 : 1088);
   scene->send_button = Button(scene->surface, LV_SYMBOL_RIGHT, [scene] {
     const std::string text = lv_textarea_get_text(scene->composer);
     const telegram::Kind kind = scene->editing_message_id
@@ -1541,7 +1542,8 @@ void OpenChat(TelegramScene *scene, int64_t id, const std::string &title) {
       ClearComposerContext(scene);
     }
   }, true);
-  lv_obj_set_pos(scene->send_button, scene->landscape ? 2960 : 1288,
+  lv_obj_set_pos(scene->send_button,
+                 scene->landscape ? lv_obj_get_width(scene->surface) - 136 : 1288,
                  scene->landscape ? 170 : 2780);
   lv_obj_set_size(scene->send_button, 120, 132);
   lv_obj_set_style_radius(scene->send_button, 60, 0);
@@ -1592,7 +1594,8 @@ void AddChat(TelegramScene *scene, const telegram::Message &message) {
     OpenChat(scene, id, title);
   });
   lv_obj_set_pos(row, 0, scene->item_y);
-  const int row_width = scene->landscape ? 3136 : 1408;
+  const int row_width = scene->landscape
+      ? lv_obj_get_width(scene->surface) - 32 : 1408;
   lv_obj_set_size(row, row_width, 164);
   lv_obj_set_style_radius(row, 0, 0);
   lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
@@ -1661,7 +1664,8 @@ void ShowChats(TelegramScene *scene) {
   scene->list = lv_obj_create(scene->surface);
   Clear(scene->list);
   lv_obj_set_pos(scene->list, 16, 170);
-  lv_obj_set_size(scene->list, scene->landscape ? 3136 : 1408,
+  lv_obj_set_size(scene->list,
+                  scene->landscape ? lv_obj_get_width(scene->surface) - 32 : 1408,
                   scene->landscape ? 1080 : 2818);
   lv_obj_add_flag(scene->list, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_scroll_dir(scene->list, LV_DIR_VER);

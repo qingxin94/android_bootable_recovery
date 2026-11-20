@@ -89,7 +89,8 @@ void BuildSideloadScene(lv_obj_t *screen, ActionCallback callback,
   Panel(guide, 40, kMainSheet);
   lv_obj_set_pos(guide, landscape ? 1560 : 64,
                  landscape ? 340 : 1080);
-  const int guide_width = landscape ? 1544 : PageWidth(screen);
+  const int guide_width = landscape ? lv_obj_get_width(screen) - 1560 - 64
+                                    : PageWidth(screen);
   lv_obj_set_size(guide, guide_width, landscape ? 820 : 1330);
   lv_obj_set_style_border_width(guide, 1, 0);
   lv_obj_set_style_border_color(guide, kMainLine, 0);
@@ -118,7 +119,7 @@ void BuildSideloadScene(lv_obj_t *screen, ActionCallback callback,
       Label(command, "adb sideload package.zip", &lv_font_montserrat_32,
             kAccent);
   lv_obj_set_pos(command_text, 28, 70);
-  lv_obj_set_width(command_text, landscape ? 1390 : command_width - 80);
+  lv_obj_set_width(command_text, command_width - 80);
   lv_label_set_long_mode(command_text, LV_LABEL_LONG_DOT);
 
   auto *start = Button(

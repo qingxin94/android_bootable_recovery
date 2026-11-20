@@ -48,7 +48,8 @@ add_executable(ui_check ui_check.cpp plugin_runtime_ui_test.cpp telegram_session
   ../scenes/operation_scene.cpp
   ../scenes/decrypt_scene.cpp ../features/browser/web_scene.cpp
   ../features/browser/session.cpp ../features/browser/launcher.cpp
-  ../scenes/telegram_scene.cpp ../features/telegram/launcher.cpp)
+  ../scenes/telegram_scene.cpp ../features/telegram/launcher.cpp
+  ../scenes/nas_scene.cpp)
 target_include_directories(ui_check PRIVATE .. ../include ../components ../assets
   ../features ../features/files ../localization ../localization/fonts
   ../scenes)

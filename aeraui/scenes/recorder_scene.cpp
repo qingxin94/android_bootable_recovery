@@ -163,28 +163,32 @@ void BuildRecorderScene(lv_obj_t *screen, ActionCallback callback,
   Panel(settings, 46, kMainSheet);
   lv_obj_set_pos(settings, landscape ? 1610 : 64,
                  landscape ? 330 : 1230);
-  lv_obj_set_size(settings, landscape ? 1430 : page_width,
-                  landscape ? 610 : 780);
+  const int settings_width = landscape ? lv_obj_get_width(screen) - 1610 - 64
+                                      : page_width;
+  lv_obj_set_size(settings, settings_width, landscape ? 610 : 780);
   auto *title = Label(settings, "Recording quality", &lv_font_montserrat_36, kText);
   lv_obj_set_pos(title, 42, 38);
   auto *hint = Label(settings,
       "720p is smoother. 1080p keeps fine text sharper but uses more CPU and storage.",
       &lv_font_montserrat_24, kMuted);
   lv_obj_set_pos(hint, 42, 100);
-  lv_obj_set_width(hint, landscape ? 1320 : page_width - 112);
+  lv_obj_set_width(hint, landscape ? settings_width - 84 : page_width - 112);
   // Two choices per row with 42 px side margins and a 42 px gap between them.
-  const int choice_width = landscape ? 650 : (page_width - 144) / 2;
+  const int choice_width = landscape ? (settings_width - 126) / 2
+                                   : (page_width - 144) / 2;
   scene->quality720 = Choice(settings, 42, 190, choice_width, "720p", [scene] {
     recorder::SetProfile(720, recorder::ProfileFps()); RefreshRecorder(scene);
   });
-  scene->quality1080 = Choice(settings, landscape ? 738 : 42 + choice_width + 42, 190,
+  scene->quality1080 = Choice(settings,
+                              42 + choice_width + 42, 190,
                               choice_width, "1080p", [scene] {
     recorder::SetProfile(1080, recorder::ProfileFps()); RefreshRecorder(scene);
   });
   scene->fps30 = Choice(settings, 42, 340, choice_width, "30 FPS", [scene] {
     recorder::SetProfile(recorder::ProfileShortEdge(), 30); RefreshRecorder(scene);
   });
-  scene->fps60 = Choice(settings, landscape ? 738 : 42 + choice_width + 42, 340,
+  scene->fps60 = Choice(settings,
+                        42 + choice_width + 42, 340,
                         choice_width, "60 FPS", [scene] {
     recorder::SetProfile(recorder::ProfileShortEdge(), 60); RefreshRecorder(scene);
   });

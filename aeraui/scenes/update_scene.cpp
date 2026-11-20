@@ -215,7 +215,8 @@ UpdateScene BuildUpdateScene(lv_obj_t *screen, ActionCallback callback,
       static_cast<int>(lv_obj_get_height(screen)) - notes_y - 80);
   auto *notes = lv_obj_create(screen);
   Panel(notes, 38, kMainSheet);
-  const int notes_width = landscape ? 1544 : PageWidth(screen);
+  const int notes_width = landscape ? lv_obj_get_width(screen) - 1560 - 64
+                                    : PageWidth(screen);
   lv_obj_set_pos(notes, landscape ? 1560 : 64, notes_y);
   lv_obj_set_size(notes, notes_width, notes_height);
   lv_obj_set_style_border_width(notes, 1, 0);

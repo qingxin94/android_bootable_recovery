@@ -11,6 +11,7 @@
 #include "src/misc/cache/instance/lv_image_cache.h"
 #include <cmath>
 #include <cstdio>
+#include <pthread.h>
 #include <thread>
 #include <unordered_set>
 #include <unistd.h>
@@ -616,6 +617,7 @@ void Prepare(WebScene *s) {
   i18n::BindLabel(s->detail,
       "Verifying and expanding the engine in RAM. Preparation continues if you leave this page.");
   s->worker = std::thread([s] {
+    pthread_setname_np(pthread_self(), "aera-web-prep");
     operation_affinity::RestoreForWorker();
     web::PrepareRuntime(s->state);
   });
@@ -794,8 +796,10 @@ void BuildWebScene(lv_obj_t *screen, ActionCallback callback, void *context,
   // LVGL's one-line setter derives a compact height. Apply it before the
   // explicit browser-bar geometry so the field and Go button stay aligned.
   lv_textarea_set_one_line(s->address, true);
+  const int browser_width = lv_obj_get_width(screen);
+  const int browser_go_x = browser_width - 64 - 304;
   lv_obj_set_pos(s->address, landscape ? 760 : 24, 188);
-  lv_obj_set_size(s->address, landscape ? 2020 : 1168, 112);
+  lv_obj_set_size(s->address, landscape ? browser_go_x - 784 : 1168, 112);
   lv_textarea_set_max_length(s->address, 2040);
   lv_textarea_set_placeholder_text(s->address, "Enter website address");
   lv_obj_set_style_text_font(s->address, UiFont(&lv_font_montserrat_36), 0);
@@ -809,7 +813,7 @@ void BuildWebScene(lv_obj_t *screen, ActionCallback callback, void *context,
   lv_obj_set_style_pad_top(s->address, 34, 0);
   lv_obj_set_style_pad_bottom(s->address, 18, 0);
   auto *go = Button(screen, "Go", [s] { OpenAddressBar(s); }, true);
-  lv_obj_set_pos(go, landscape ? 2800 : 1210, 188);
+  lv_obj_set_pos(go, landscape ? browser_go_x : 1210, 188);
   lv_obj_set_size(go, landscape ? 304 : 206, 112);
   lv_obj_set_style_radius(go, 56, 0);
   const char *controls[] = {LV_SYMBOL_LEFT, LV_SYMBOL_RIGHT,
@@ -833,9 +837,11 @@ void BuildWebScene(lv_obj_t *screen, ActionCallback callback, void *context,
       }
     });
     s->controls[i] = button;
+    const int browser_button_width = landscape
+        ? (browser_width - 824 - 5 * 24) / 6 : 212;
     lv_obj_set_pos(button, (landscape ? 760 : 24) +
-                     i * (landscape ? 394 : 236), 334);
-    lv_obj_set_size(button, landscape ? 370 : 212, 106);
+                     i * (landscape ? browser_button_width + 24 : 236), 334);
+    lv_obj_set_size(button, landscape ? browser_button_width : 212, 106);
     lv_obj_set_style_radius(button, 53, 0);
     lv_obj_set_style_text_font(lv_obj_get_child(button, 0),
                                UiFont(&lv_font_montserrat_48), 0);

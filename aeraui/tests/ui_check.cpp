@@ -1,4 +1,5 @@
 #include "scene.hpp"
+#include "nas/smb_browser.hpp"
 #include "../../aera_remote/backup_cancel.hpp"
 #include <aeraui/screen_timeout.hpp>
 #include "ui_components.hpp"
@@ -168,6 +169,23 @@ bool RecoverySetWallpaperLayout(const WallpaperLayout &layout) {
 }
 static LockTheme lock_theme;
 WifiConnection RecoveryWifiConnection() { return {}; }
+NasStatus RecoveryNasStatus() { return {}; }
+NasConfig RecoverySavedNasConfig(const std::string &protocol) {
+  NasConfig config; config.type = protocol; return config;
+}
+bool RecoverySetNasConfig(const NasConfig &, std::string *) { return true; }
+bool RecoveryImportNasKey(const std::string &, const std::string &,
+                          std::string *error) {
+  if (error) error->clear();
+  return true;
+}
+std::vector<BackupStorage> RecoveryBackupStorages() {
+  return {{"Internal storage", "/tmp", true, 1000000000}};
+}
+namespace smb {
+Result List(const NasConfig &, const std::string &, const std::string &,
+            const std::atomic<bool> &) { return {}; }
+}  // namespace smb
 static MobileStatus test_mobile;
 static bool test_mobile_status=false,test_data_locked=false;
 static bool test_mobile_switching=false;
@@ -942,6 +960,139 @@ int main(int argc,char **argv) {
     }
     lv_deinit(); std::filesystem::remove_all(backup_root);
     printf("Wide UI: %d reboot and %d page cases passed.\n", reboot_cases, page_cases);
+    return 0;
+  }
+
+  if (!strcmp(argv[1], "--tb323fu-pages")) {
+    const std::array<std::pair<int, int>, 2> resolutions{{
+        {1904, 3040}, {3040, 1904}}};
+    frame.resize(3040 * 3040 * 4);
+    lv_display_set_buffers(display, frame.data(), nullptr, frame.size(),
+                           LV_DISPLAY_RENDER_MODE_DIRECT);
+    int cases = 0;
+    for (auto resolution : resolutions) for (int size : {0, 2}) {
+      const int width = resolution.first;
+      const int height = resolution.second;
+      lv_display_set_resolution(display, width, height);
+      design::ApplyInterfaceSize(size);
+      interface_size = static_cast<InterfaceSize>(size);
+
+      auto check_page = [&](const char *name, auto build) {
+        auto *page = lv_obj_create(nullptr);
+        build(page);
+        lv_screen_load(page); Tick(35);
+        fprintf(stderr, "TB323FU checking page %s at %dx%d\n", name, width, height);
+        fflush(stderr);
+        for (uint32_t i = 0; i < lv_obj_get_child_count(page); ++i) {
+          auto *child = lv_obj_get_child(page, i);
+          if (!lv_obj_is_visible(child) ||
+              lv_obj_check_type(child, &lv_label_class)) continue;
+          AssertInside(child, width, height);
+        }
+        if (!strcmp(name, "about")) {
+          auto *contributor = lv_obj_get_parent(
+              FindLabelContaining(page, "Jonas Salo"));
+          auto *identity = lv_obj_get_parent(FindLabel(page, "MAINTAINER"));
+          assert(contributor && identity);
+          AssertInside(contributor, width, height);
+          AssertInside(identity, width, height);
+        }
+        if (!strcmp(name, "appvault")) {
+          auto *apps_panel = lv_obj_get_parent(FindLabel(page, "Apps"));
+          assert(apps_panel);
+          AssertInside(apps_panel, width, height);
+        }
+        if (!strcmp(name, "backup")) {
+          auto *choose_label = FindLabelContaining(page, "Choose storage");
+          assert(choose_label);
+          auto *choose = lv_obj_get_parent(choose_label);
+          if (!lv_obj_check_type(choose, &lv_button_class))
+            choose = lv_obj_get_parent(choose);
+          lv_obj_send_event(choose, LV_EVENT_CLICKED, nullptr); Tick(12);
+          auto *heading = FindLabel(page, "Choose storage"); assert(heading);
+          AssertInside(lv_obj_get_parent(heading), width, height);
+        }
+        if (!strcmp(name, "users")) {
+          auto *title = FindLabel(page, "Owner"); assert(title);
+          auto *row = lv_obj_get_parent(title);
+          AssertInside(row, width, height);
+        }
+        if (!strcmp(name, "sideload")) {
+          auto *guide = lv_obj_get_parent(
+              FindLabel(page, "Start a sideload session"));
+          assert(guide);
+          AssertInside(guide, width, height);
+        }
+        char path[160];
+        snprintf(path, sizeof(path), "/tmp/aera-tb-%s-%dx%d-s%d.png",
+                 name, width, height, size);
+        save(path, 30);
+        lv_screen_load(screen); lv_obj_delete(page); Tick(2);
+        ++cases;
+      };
+
+      check_page("reboot", [](lv_obj_t *page) {
+        BuildRebootScene(page, RecordAction, nullptr);
+      });
+      check_page("sideload", [](lv_obj_t *page) {
+        BuildSideloadScene(page, RecordAction, nullptr);
+      });
+      check_page("about", [](lv_obj_t *page) {
+        BuildAboutScene(page, RecordAction, nullptr);
+      });
+      check_page("home", [](lv_obj_t *page) {
+        BuildHomeScene(page, RecordAction, nullptr);
+      });
+      check_page("files", [](lv_obj_t *page) {
+        BuildFilesScene(page, RecordAction, nullptr);
+      });
+      check_page("terminal", [](lv_obj_t *page) {
+        BuildTerminalScene(page, RecordAction, nullptr);
+      });
+      check_page("telegram", [](lv_obj_t *page) {
+        BuildTelegramSessionTestScene(page, true, false, -1);
+      });
+      check_page("nas", [](lv_obj_t *page) {
+        BuildNasScene(page, RecordAction, nullptr);
+      });
+      check_page("users", [](lv_obj_t *page) {
+        BuildToolScene(page, Action::kUsers, RecordAction, nullptr);
+      });
+      check_page("theme", [](lv_obj_t *page) {
+        BuildToolScene(page, Action::kTheme, RecordAction, nullptr);
+      });
+      check_page("preferences", [](lv_obj_t *page) {
+        BuildToolScene(page, Action::kPreferences, RecordAction, nullptr);
+      });
+      check_page("operation", [](lv_obj_t *page) {
+        JobRequest request; request.job = Job::kBackup;
+        request.path = "/tmp/aera-backup";
+        BuildJobScene(page, request, RecordAction, nullptr);
+      });
+      check_page("backup", [](lv_obj_t *page) {
+        BuildToolScene(page, Action::kBackup, RecordAction, nullptr);
+      });
+      check_page("update", [](lv_obj_t *page) {
+        BuildUpdateScene(page, RecordAction, nullptr);
+      });
+      check_page("wifi", [](lv_obj_t *page) {
+        BuildWifiScene(page, RecordAction, nullptr);
+      });
+      check_page("password", [width, height](lv_obj_t *page) {
+        BuildDecryptScene(page, 1, false, 0, 3, RecordAction, nullptr);
+        auto *keyboard = FindType(page, &lv_keyboard_class);
+        assert(keyboard);
+        AssertInside(keyboard, width, height);
+        auto *submit = Find(page, "Unlock storage"); assert(submit);
+        auto *skip = Find(page, "Skip for now"); assert(skip);
+        AssertInside(submit, width, height);
+        AssertInside(skip, width, height);
+      });
+      printf("TB323FU pages: %dx%d size=%d done\n", width, height, size);
+      fflush(stdout);
+    }
+    lv_deinit(); std::filesystem::remove_all(backup_root);
+    printf("TB323FU pages: %d cases passed.\n", cases);
     return 0;
   }
 

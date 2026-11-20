@@ -25,6 +25,7 @@
 #include <memory>
 #include <poll.h>
 #include <string>
+#include <pthread.h>
 #include <thread>
 #include <time.h>
 #include <vector>
@@ -573,6 +574,17 @@ public:
     }
     if (decrypt_complete_.exchange(false, std::memory_order_acq_rel)) {
       if (decrypt_thread_.joinable()) decrypt_thread_.join();
+      // A queued rotation or a forced scene change can invalidate every
+      // widget in the credential scene. Discard the stale result instead of
+      // touching freed LVGL objects.
+      if (decrypt_scene_.status == nullptr ||
+          !lv_obj_is_valid(decrypt_scene_.status)) {
+        decrypt_scene_ = {};
+        decryption_active_ = false;
+        decrypt_running_ = false;
+        ShowHome();
+        return;
+      }
       const bool success =
           decrypt_result_.load(std::memory_order_acquire) == 0;
       CompleteDecryptAttempt(decrypt_scene_, success);
@@ -3202,6 +3214,7 @@ private:
     decrypt_result_.store(-1, std::memory_order_release);
     decrypt_complete_.store(false, std::memory_order_release);
     decrypt_thread_ = std::thread([this, credential]() {
+      pthread_setname_np(pthread_self(), "aera-decrypt");
       operation_affinity::RestoreForWorker();
       const int result =
           aeraui_decrypt_data(credential.c_str(), crypto_user_id_);
@@ -3430,6 +3443,7 @@ private:
     operation_result_.store(-1, std::memory_order_release);
     operation_complete_.store(false, std::memory_order_release);
     operation_thread_ = std::thread([this, request]() {
+      pthread_setname_np(pthread_self(), "aera-operation");
       const int affinity_error = operation_affinity::RestoreForWorker();
       cpu_set_t effective{};
       const int allowed = sched_getaffinity(0, sizeof(effective), &effective) == 0
@@ -3457,6 +3471,7 @@ private:
     wifi_result_.store(-1, std::memory_order_release);
     wifi_complete_.store(false, std::memory_order_release);
     wifi_thread_ = std::thread([this, request]() {
+      pthread_setname_np(pthread_self(), "aera-wifi");
       operation_affinity::RestoreForWorker();
       const int result = RecoveryRunWifi(request);
       wifi_result_.store(result, std::memory_order_release);
@@ -3500,6 +3515,7 @@ private:
     nas_result_.store(-1, std::memory_order_release);
     nas_complete_.store(false, std::memory_order_release);
     nas_thread_ = std::thread([this, request]() {
+      pthread_setname_np(pthread_self(), "aera-nas");
       operation_affinity::RestoreForWorker();
       const int result = RecoveryRunNas(request);
       nas_result_.store(result, std::memory_order_release);
@@ -3531,6 +3547,7 @@ private:
     plugin_result_.store(-1, std::memory_order_release);
     plugin_complete_.store(false, std::memory_order_release);
     plugin_thread_ = std::thread([this, request]() {
+      pthread_setname_np(pthread_self(), "aera-plugin");
       operation_affinity::RestoreForWorker();
       const bool result = plugins::Run(request, plugin_progress_);
       plugin_result_.store(result ? 0 : -1, std::memory_order_release);
@@ -3593,6 +3610,7 @@ private:
     if (current_scene_ == Action::kUpdates)
       RefreshUpdateScene(update_scene_);
     update_thread_ = std::thread([this] {
+      pthread_setname_np(pthread_self(), "aera-update");
       operation_affinity::RestoreForWorker();
       const bool success = update::Check();
       update_result_.store(success ? 0 : -1, std::memory_order_release);
@@ -3621,6 +3639,7 @@ private:
     update_complete_.store(false, std::memory_order_release);
     RefreshUpdateScene(update_scene_);
     update_thread_ = std::thread([this] {
+      pthread_setname_np(pthread_self(), "aera-update");
       operation_affinity::RestoreForWorker();
       const bool success = update::Download();
       update_result_.store(success ? 0 : -1, std::memory_order_release);
@@ -4131,6 +4150,9 @@ private:
   }
 
   void ApplyDisplayRotation(bool landscape) {
+    // Rotation rebuilds and deletes the active screen. Never tear down the
+    // credential scene while a decrypt worker can still post its result.
+    if (decryption_active_ || decrypt_running_) return;
     landscape_ = landscape;
     if (display_ != nullptr) {
       lv_display_set_rotation(

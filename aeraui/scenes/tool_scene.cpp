@@ -1084,8 +1084,9 @@ void BuildPartitions(Tools *state) {
   state->list = Scroll(state->screen, landscape ? 350 : 870,
                        landscape ? 900 : 1610);
   if (landscape) {
-    lv_obj_set_x(state->list, 1100);
-    lv_obj_set_width(state->list, 2004);
+    const int list_x = 1100;
+    lv_obj_set_x(state->list, list_x);
+    lv_obj_set_width(state->list, lv_obj_get_width(state->screen) - list_x - 64);
   }
 
   if (backup || restore) {
@@ -3669,8 +3670,10 @@ void BuildUsers(Tools *state) {
          "Unlock additional Android users only when you need them.",
          state->callback, state->context);
   const bool landscape = Landscape(state->screen);
-  state->list = Scroll(state->screen, landscape ? 340 : 452,
-                       landscape ? 930 : 2290);
+  const int users_list_y = landscape ? 340 : 452;
+  state->list = Scroll(state->screen, users_list_y,
+                       std::max(400, lv_obj_get_height(state->screen) -
+                           users_list_y - NavigationHeight(state->screen)));
   const auto users = RecoveryAndroidUsers();
   lv_obj_update_layout(state->list);
   const int row_width =
