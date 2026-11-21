@@ -234,10 +234,34 @@ static void Supervise(const std::string &root, const char *memory_limit) {
   // makes those independent supervisors collide at mkdir(), so use the trusted
   // launcher PID to give every process tree its own bounded resource group.
   const std::string name = root.substr(5) + "-" + std::to_string(getpid());
-  const std::string tasks = "/dev/cg2_bpf/" + name;
-  const std::string memory = "/dev/memcg/" + name;
-  Check(mkdir(tasks.c_str(), 0700), "private browser task group");
-  if (mkdir(memory.c_str(), 0700)) { rmdir(tasks.c_str()); Die("private browser memory group"); }
+  std::string tasks, memory;
+  bool unified = false;
+  // Android 16 mounts the memory controller on the unified cgroup v2
+  // hierarchy at /sys/fs/cgroup. A v1 memory mount then fails with EBUSY, so
+  // prefer one group that supplies cgroup.procs, memory.max and cgroup.kill.
+  const std::string unified_path = "/sys/fs/cgroup/" + name;
+  const bool created_unified = mkdir(unified_path.c_str(), 0700) == 0;
+  if (created_unified &&
+      !access((unified_path + "/cgroup.procs").c_str(), F_OK) &&
+      !access((unified_path + "/memory.max").c_str(), F_OK) &&
+      WriteFile(unified_path + "/memory.max", memory_limit)) {
+    tasks = memory = unified_path;
+    unified = true;
+  } else {
+    if (created_unified) rmdir(unified_path.c_str());
+    tasks = "/dev/cg2_bpf/" + name;
+    memory = "/dev/memcg/" + name;
+    Check(mkdir(tasks.c_str(), 0700), "private browser task group");
+    if (mkdir(memory.c_str(), 0700)) { rmdir(tasks.c_str()); Die("private browser memory group"); }
+    if (!WriteFile(memory + "/memory.limit_in_bytes", memory_limit)) {
+      rmdir(memory.c_str()); rmdir(tasks.c_str()); Die("browser resource limits");
+    }
+    struct stat swap{};
+    if (!stat((memory + "/memory.memsw.limit_in_bytes").c_str(), &swap) &&
+        !WriteFile(memory + "/memory.memsw.limit_in_bytes", memory_limit)) {
+      rmdir(memory.c_str()); rmdir(tasks.c_str()); Die("browser swap limit");
+    }
+  }
   int kill_file = open((tasks + "/cgroup.kill").c_str(), O_WRONLY | O_CLOEXEC | O_NOFOLLOW);
   int killer = kill_file < 0 ? -1 : fcntl(kill_file, F_DUPFD_CLOEXEC, 5);
   if (kill_file >= 0) close(kill_file);
@@ -245,15 +269,6 @@ static void Supervise(const std::string &root, const char *memory_limit) {
   // recovery kernels (including Garnet's) therefore expose the Android task
   // and memory controllers without that file. Keep the hard memory bound and
   // fall back to the jail's dedicated process group for tree termination.
-  if (!WriteFile(memory + "/memory.limit_in_bytes", memory_limit)) {
-    if (killer >= 0) close(killer);
-    rmdir(memory.c_str()); rmdir(tasks.c_str()); Die("browser resource limits");
-  }
-  struct stat swap{};
-  if (!stat((memory + "/memory.memsw.limit_in_bytes").c_str(), &swap) &&
-      !WriteFile(memory + "/memory.memsw.limit_in_bytes", memory_limit)) {
-    close(killer); rmdir(memory.c_str()); rmdir(tasks.c_str()); Die("browser swap limit");
-  }
   struct sigaction action{}; action.sa_handler = Stop; sigemptyset(&action.sa_mask);
   for (int signal : {SIGTERM, SIGINT, SIGHUP}) Check(sigaction(signal, &action, nullptr), "supervisor signals");
   const pid_t parent = getppid();
@@ -262,12 +277,18 @@ static void Supervise(const std::string &root, const char *memory_limit) {
   const pid_t child = fork();
   if (child < 0) {
     if (killer >= 0) close(killer);
-    rmdir(memory.c_str()); rmdir(tasks.c_str()); Die("browser fork");
+    if (unified) {
+      rmdir(tasks.c_str());
+    } else {
+      rmdir(memory.c_str()); rmdir(tasks.c_str());
+    }
+    Die("browser fork");
   }
   if (!child) {
     for (int signal : {SIGTERM, SIGINT, SIGHUP}) ::signal(signal, SIG_DFL);
     Check(setsid(), "private browser process group");
-    if (!WriteFile(tasks + "/cgroup.procs", "0") || !WriteFile(memory + "/cgroup.procs", "0"))
+    if (!WriteFile(tasks + "/cgroup.procs", "0") ||
+        (!unified && !WriteFile(memory + "/cgroup.procs", "0")))
       Die("join browser resource groups");
     if (killer >= 0) close(killer);
     return;
@@ -292,13 +313,14 @@ static void Supervise(const std::string &root, const char *memory_limit) {
     if (kill(child, SIGKILL) && errno != ESRCH) Die("stop browser leader");
   }
   if (stopping) while (waitpid(child, &status, 0) < 0 && errno == EINTR) {}
-  bool removed_memory = false, removed_tasks = false;
-  for (int attempt = 0; attempt < 50 && (!removed_memory || !removed_tasks); ++attempt) {
-    if (!removed_memory) removed_memory = !rmdir(memory.c_str());
+  bool removed_memory = unified, removed_tasks = false;
+  for (int attempt = 0; attempt < 50 && (!removed_tasks || (!unified && !removed_memory)); ++attempt) {
     if (!removed_tasks) removed_tasks = !rmdir(tasks.c_str());
-    if (!removed_memory || !removed_tasks) usleep(100000);
+    if (!unified && !removed_memory) removed_memory = !rmdir(memory.c_str());
+    if (!removed_tasks || (!unified && !removed_memory)) usleep(100000);
   }
-  if (!removed_memory || !removed_tasks) fprintf(stderr, "Browser resource group cleanup incomplete\n");
+  if (!removed_tasks || (!unified && !removed_memory))
+    fprintf(stderr, "Browser resource group cleanup incomplete\n");
   _exit(!stopping && WIFEXITED(status) ? WEXITSTATUS(status) : 78);
 }
 int main(int argc, char **argv) {
