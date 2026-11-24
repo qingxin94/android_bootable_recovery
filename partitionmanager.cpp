@@ -2869,20 +2869,37 @@ int TWPartitionManager::Decrypt_Device(string Password, int user_id) {
 			gui_msg(Msg("decrypt_user_success_fbe=User {1} Decrypted Successfully")(user_id));
 			Mark_User_Decrypted(user_id);
 			if (user_id == 0) {
-				// App clones are tied to the owner's credential. Once the owner
-				// SP is unlocked and its auth token is refreshed, unlock every
-				// clone with the same password instead of asking the user again.
+				// App clones are tied to the owner's credential. The owner
+				// Decrypt_User(0) above already refreshed owner 0's Gatekeeper
+				// auth token; verify the parent only once for the whole batch
+				// and reuse that token for 900-999.
+				bool has_clone = false;
 				for (std::vector<users_struct>::iterator clone = Users_List.begin();
 					 clone != Users_List.end(); ++clone) {
 					const int clone_id = atoi(clone->userId.c_str());
 					if (clone_id < 900 || clone_id > 999 || clone->isDecrypted)
 						continue;
-					if (android::keystore::Decrypt_User(clone_id, Password)) {
-						gui_msg(Msg("decrypt_user_success_fbe=User {1} Decrypted Successfully")(clone_id));
-						Mark_User_Decrypted(clone_id);
-					} else {
-						LOGINFO("Unable to unlock app clone user %d with owner credential\n", clone_id);
+					if (TWFunc::Path_Exists("/data/system/users/" +
+							std::to_string(clone_id) + "/gatekeeper.profile.key")) {
+						has_clone = true;
+						break;
 					}
+				}
+				if (has_clone) {
+					android::keystore::Begin_App_Clone_Batch(Password.c_str());
+					for (std::vector<users_struct>::iterator clone = Users_List.begin();
+						 clone != Users_List.end(); ++clone) {
+						const int clone_id = atoi(clone->userId.c_str());
+						if (clone_id < 900 || clone_id > 999 || clone->isDecrypted)
+							continue;
+						if (android::keystore::Decrypt_User(clone_id, Password)) {
+							gui_msg(Msg("decrypt_user_success_fbe=User {1} Decrypted Successfully")(clone_id));
+							Mark_User_Decrypted(clone_id);
+						} else {
+							LOGINFO("Unable to unlock app clone user %d with owner credential\n", clone_id);
+						}
+					}
+					android::keystore::End_App_Clone_Batch();
 				}
 				Post_Decrypt("");
 			}
