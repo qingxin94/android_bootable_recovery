@@ -21,8 +21,6 @@ namespace {
 using namespace widgets;
 constexpr int kBrowserViewportWidth = 1392;
 constexpr int kBrowserViewportHeight = 2708;
-constexpr int kBrowserImageScale =
-    (kBrowserViewportWidth * 256 + web::kWidth / 2) / web::kWidth;
 struct WebScene;
 void BrowserRefreshReady(lv_event_t *event);
 void HideKeyboard(WebScene *s);
@@ -783,12 +781,17 @@ void BuildWebScene(lv_obj_t *screen, ActionCallback callback, void *context,
                     kBrowserViewportHeight;
     s->view_left = 48;
   } else {
+    // The tablet is 1904 px wide in portrait, while the old browser scene
+    // inherited a 1440-wide canvas and kept a fixed 1392 px web viewport.
+    // Size the viewport from the real screen so the page uses the full panel.
+    s->view_width = std::max(320, lv_obj_get_width(screen) - 48);
     s->view_height = lv_obj_get_height(screen) - s->view_top;
   }
   s->web_progress = lv_bar_create(screen);
   lv_obj_set_pos(s->web_progress, landscape ? 760 : 24, 316);
   lv_obj_set_size(s->web_progress,
-                  landscape ? lv_obj_get_width(screen) - 824 : 1392, 6);
+                  landscape ? lv_obj_get_width(screen) - 824
+                            : s->view_width, 6);
   lv_obj_set_style_bg_color(s->web_progress, kAccent, LV_PART_INDICATOR);
   lv_obj_add_flag(s->web_progress, LV_OBJ_FLAG_HIDDEN);
   s->address = TextArea(screen);
@@ -797,9 +800,14 @@ void BuildWebScene(lv_obj_t *screen, ActionCallback callback, void *context,
   // explicit browser-bar geometry so the field and Go button stay aligned.
   lv_textarea_set_one_line(s->address, true);
   const int browser_width = lv_obj_get_width(screen);
-  const int browser_go_x = browser_width - 64 - 304;
+  const int browser_go_width = landscape ? 304 : 206;
+  const int browser_go_x = landscape
+      ? browser_width - 64 - browser_go_width
+      : browser_width - 24 - browser_go_width;
   lv_obj_set_pos(s->address, landscape ? 760 : 24, 188);
-  lv_obj_set_size(s->address, landscape ? browser_go_x - 784 : 1168, 112);
+  lv_obj_set_size(s->address,
+                  landscape ? browser_go_x - 784
+                            : browser_go_x - 24 - 18, 112);
   lv_textarea_set_max_length(s->address, 2040);
   lv_textarea_set_placeholder_text(s->address, "Enter website address");
   lv_obj_set_style_text_font(s->address, UiFont(&lv_font_montserrat_36), 0);
@@ -813,8 +821,8 @@ void BuildWebScene(lv_obj_t *screen, ActionCallback callback, void *context,
   lv_obj_set_style_pad_top(s->address, 34, 0);
   lv_obj_set_style_pad_bottom(s->address, 18, 0);
   auto *go = Button(screen, "Go", [s] { OpenAddressBar(s); }, true);
-  lv_obj_set_pos(go, landscape ? browser_go_x : 1210, 188);
-  lv_obj_set_size(go, landscape ? 304 : 206, 112);
+  lv_obj_set_pos(go, browser_go_x, 188);
+  lv_obj_set_size(go, browser_go_width, 112);
   lv_obj_set_style_radius(go, 56, 0);
   const char *controls[] = {LV_SYMBOL_LEFT, LV_SYMBOL_RIGHT,
                             LV_SYMBOL_REFRESH, LV_SYMBOL_HOME,
@@ -838,10 +846,12 @@ void BuildWebScene(lv_obj_t *screen, ActionCallback callback, void *context,
     });
     s->controls[i] = button;
     const int browser_button_width = landscape
-        ? (browser_width - 824 - 5 * 24) / 6 : 212;
+        ? (browser_width - 824 - 5 * 24) / 6
+        : std::max(120, (browser_width - 48 - 5 * 24) / 6);
+    const int browser_button_step = browser_button_width + 24;
     lv_obj_set_pos(button, (landscape ? 760 : 24) +
-                     i * (landscape ? browser_button_width + 24 : 236), 334);
-    lv_obj_set_size(button, landscape ? browser_button_width : 212, 106);
+                     i * browser_button_step, 334);
+    lv_obj_set_size(button, browser_button_width, 106);
     lv_obj_set_style_radius(button, 53, 0);
     lv_obj_set_style_text_font(lv_obj_get_child(button, 0),
                                UiFont(&lv_font_montserrat_48), 0);
@@ -893,10 +903,12 @@ void BuildWebScene(lv_obj_t *screen, ActionCallback callback, void *context,
   lv_obj_set_size(s->viewport, s->view_width, s->view_height);
   lv_obj_add_flag(s->viewport, LV_OBJ_FLAG_HIDDEN);
   s->image = lv_image_create(s->viewport);
+  lv_obj_set_size(s->image, s->view_width, s->view_height);
   lv_image_set_pivot(s->image, 0, 0);
-  lv_image_set_scale(s->image, landscape
-      ? (s->view_width * 256 + web::kWidth / 2) / web::kWidth
-      : kBrowserImageScale);
+  // The WebKit backing store is 1080x2100 (a phone-shaped 360x700 CSS
+  // viewport). Stretch the delivered frame into the real browser viewport so
+  // the 1904-wide panel no longer leaves a fixed 1392-wide strip on the right.
+  lv_image_set_inner_align(s->image, LV_IMAGE_ALIGN_STRETCH);
   lv_obj_remove_flag(s->image, LV_OBJ_FLAG_CLICKABLE);
   s->descriptor.header.magic = LV_IMAGE_HEADER_MAGIC;
   s->descriptor.header.cf = LV_COLOR_FORMAT_ARGB8888;
